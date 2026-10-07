@@ -6,6 +6,10 @@ Android TV APK downloads.
 
 https://github.com/wvte/topplayer/releases/latest/download/Topplayer.apk
 
+**Versie 1.0.7 (op deze branch, series via de Xtream API):**
+
+https://github.com/wvte/topplayer/raw/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.7.apk
+
 **Versie 1.0.6 (op deze branch, plaatjescache en vooruit laden):**
 
 https://github.com/wvte/topplayer/raw/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.6.apk
