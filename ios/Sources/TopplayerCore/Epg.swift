@@ -27,7 +27,7 @@ public final class EpgImporter {
             let header = (p["header_epg"] as? String ?? "").trimmed
             let src = !custom.isEmpty ? custom : header
             if !src.isEmpty {
-                for u in src.split(separator: ",") where !u.trimmed.isEmpty { if !urls.contains(u.trimmed) { urls.append(u.trimmed) } }
+                for u in src.split(separator: ",").map({ String($0).trimmed }) where !u.isEmpty { if !urls.contains(u) { urls.append(u) } }
             } else if let x = XtreamAccount.parse(p["url"] as? String) {
                 if !urls.contains(x.xmltv()) { urls.append(x.xmltv()) }
             }

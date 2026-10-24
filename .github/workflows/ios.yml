@@ -8,6 +8,15 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Swift tests (core logic, database, importer)
+      - name: Build the Swift core
+        shell: bash
         working-directory: ios
-        run: swift test 2>&1 | tail -150
+        run: |
+          swift build 2>&1 | tee build.log | grep -E "error" | sort -u | head -40
+          test ${PIPESTATUS[0]} -eq 0
+      - name: Tests (core logic, database, importer)
+        shell: bash
+        working-directory: ios
+        run: |
+          swift test 2>&1 | tee test.log | grep -E "error:|failed|Executed|passed \(" | sort -u | head -80
+          test ${PIPESTATUS[0]} -eq 0
