@@ -13,7 +13,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
 
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { OrientationControl.mask }
     override var shouldAutorotate: Bool { true }
 
     override func viewDidLoad() {
@@ -90,9 +90,23 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         // keep the interface out of the notch; the video itself may use the whole screen
-        let ins = view.safeAreaInsets
-        web?.frame = CGRect(x: ins.left, y: 0, width: view.bounds.width - ins.left - ins.right, height: view.bounds.height)
+        web?.frame = view.bounds.inset(by: view.safeAreaInsets)
         if player != nil && fullVideo { player.view.frame = videoHost.bounds }
+    }
+
+    /// The interface is upright on a phone; video plays in landscape. iPads follow the device.
+    func requestOrientation(landscape: Bool) {
+        let phone = UIDevice.current.userInterfaceIdiom == .phone
+        let mask: UIInterfaceOrientationMask = phone ? (landscape ? .landscape : .portrait) : .all
+        OrientationControl.mask = mask
+        if #available(iOS 16.0, *) {
+            setNeedsUpdateOfSupportedInterfaceOrientations()
+            view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
+        } else {
+            let target: UIInterfaceOrientation = phone ? (landscape ? .landscapeRight : .portrait) : .unknown
+            if target != .unknown { UIDevice.current.setValue(target.rawValue, forKey: "orientation") }
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
     }
 
     func setBackground(hex: String) {
@@ -102,6 +116,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
         }
         web.backgroundColor = color
         web.scrollView.backgroundColor = color
+        if hex.hasPrefix("#") { view.backgroundColor = color == .clear ? UIColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 1) : color }
     }
 
     func setVideoRect(x: Double, y: Double, w: Double, h: Double, visible: Bool) {

@@ -135,6 +135,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.setBackground(hex: c) }
             return nil
         case "app.textInput": return nil
+        case "app.orientation":
+            let landscape = b(a, "landscape")
+            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.requestOrientation(landscape: landscape) }
+            return nil
 
         // playlists
         case "pl.list":
