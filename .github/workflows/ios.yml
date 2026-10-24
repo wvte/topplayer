@@ -1,4 +1,7 @@
 name: ios
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
 on:
   workflow_dispatch:
   push:
@@ -57,12 +60,14 @@ jobs:
       - name: Put the .ipa in downloads/
         shell: bash
         run: |
-          mkdir -p downloads
-          cp ios/Topplayer-unsigned.ipa downloads/Topplayer-iOS-unsigned.ipa
-          (cd downloads && shasum -a 256 Topplayer-iOS-unsigned.ipa > Topplayer-iOS-unsigned.sha256)
+          cp ios/Topplayer-unsigned.ipa /tmp/Topplayer-iOS-unsigned.ipa
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git checkout -B publish "origin/${GITHUB_REF_NAME}"
+          mkdir -p downloads
+          cp /tmp/Topplayer-iOS-unsigned.ipa downloads/Topplayer-iOS-unsigned.ipa
+          (cd downloads && shasum -a 256 Topplayer-iOS-unsigned.ipa > Topplayer-iOS-unsigned.sha256)
           git add downloads/Topplayer-iOS-unsigned.ipa downloads/Topplayer-iOS-unsigned.sha256
           git commit -m "iOS: unsigned .ipa from CI (${GITHUB_SHA::7})" || exit 0
-          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
