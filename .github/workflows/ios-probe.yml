@@ -1,0 +1,11 @@
+name: ios-probe
+on:
+  workflow_dispatch:
+  push:
+    paths: ['ios/**', '.github/workflows/ios-probe.yml']
+jobs:
+  probe:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version && xcodebuild -version && xcrun simctl list runtimes | head -5
