@@ -91,7 +91,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         // keep the interface out of the notch; the video itself may use the whole screen
-        web?.frame = view.bounds.inset(by: view.safeAreaInsets)
+        web?.frame = view.bounds
         if player != nil && fullVideo { player.view.frame = videoHost.bounds }
     }
 
@@ -135,7 +135,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
             player.view.frame = videoHost.bounds
         } else {
             fullVideo = false
-            player.view.frame = CGRect(x: x + (web?.frame.minX ?? 0), y: y + (web?.frame.minY ?? 0), width: w, height: h)
+            player.view.frame = CGRect(x: x, y: y, width: w, height: h)
         }
         player.setRect(x: x, y: y, w: w, h: h, visible: visible)
     }
