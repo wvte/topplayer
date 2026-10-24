@@ -1,0 +1,31 @@
+#EXTM3U
+#EXTINF:-1 tvg-name="Akamai Live Test" tvg-logo="https://app.topplayer.local/demo/live-akamai.svg" tvg-type="live" group-title="Test | Live",Akamai Live Test
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+#EXTINF:-1 tvg-name="Apple Testbeeld" tvg-logo="https://app.topplayer.local/demo/live-apple.svg" tvg-type="live" group-title="Test | Live",Apple Testbeeld
+https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8
+#EXTINF:-1 tvg-name="Big Buck Bunny 24/7" tvg-logo="https://app.topplayer.local/demo/live-bbb.svg" tvg-type="live" group-title="Test | Live",Big Buck Bunny 24/7
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+#EXTINF:-1 tvg-name="Big Buck Bunny (2008)" tvg-logo="https://app.topplayer.local/demo/bbb.svg" tvg-type="movie" group-title="Films | Open Movies",Big Buck Bunny (2008)
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+#EXTINF:-1 tvg-name="Sintel (2010)" tvg-logo="https://app.topplayer.local/demo/sintel.svg" tvg-type="movie" group-title="Films | Open Movies",Sintel (2010)
+https://download.blender.org/durian/movies/sintel-1280-stereo.mp4
+#EXTINF:-1 tvg-name="Tears of Steel (2012)" tvg-logo="https://app.topplayer.local/demo/tos.svg" tvg-type="movie" group-title="Films | Open Movies",Tears of Steel (2012)
+https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
+#EXTINF:-1 tvg-name="Tears of Steel (2012) Ondertitels" tvg-logo="https://app.topplayer.local/demo/tos.svg" tvg-type="movie" group-title="Films | Testfuncties",Tears of Steel (2012) Ondertitels
+https://test-streams.mux.dev/tos_ismc/main.m3u8
+#EXTINF:-1 tvg-name="Apple Demo (2014) Audio en ondertitels" tvg-logo="https://app.topplayer.local/demo/testbeeld.svg" tvg-type="movie" group-title="Films | Testfuncties",Apple Demo (2014) Audio en ondertitels
+https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8
+#EXTINF:-1 tvg-name="Open Movies S01E01 Big Buck Bunny" tvg-logo="https://app.topplayer.local/demo/openmovies.svg" tvg-type="series" group-title="Series | Test",Open Movies S01E01 Big Buck Bunny
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+#EXTINF:-1 tvg-name="Open Movies S01E02 Sintel" tvg-logo="https://app.topplayer.local/demo/openmovies.svg" tvg-type="series" group-title="Series | Test",Open Movies S01E02 Sintel
+https://download.blender.org/durian/movies/sintel-1280-stereo.mp4
+#EXTINF:-1 tvg-name="Open Movies S01E03 Tears of Steel" tvg-logo="https://app.topplayer.local/demo/openmovies.svg" tvg-type="series" group-title="Series | Test",Open Movies S01E03 Tears of Steel
+https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
+#EXTINF:-1 tvg-name="Open Movies S01E04 Tears of Steel met ondertitels" tvg-logo="https://app.topplayer.local/demo/openmovies.svg" tvg-type="series" group-title="Series | Test",Open Movies S01E04 Tears of Steel met ondertitels
+https://test-streams.mux.dev/tos_ismc/main.m3u8
+#EXTINF:-1 tvg-name="Testbeelden S01E01 Geavanceerd fMP4" tvg-logo="https://app.topplayer.local/demo/testbeeld.svg" tvg-type="series" group-title="Series | Test",Testbeelden S01E01 Geavanceerd fMP4
+https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8
+#EXTINF:-1 tvg-name="Testbeelden S01E02 Geavanceerd TS" tvg-logo="https://app.topplayer.local/demo/testbeeld.svg" tvg-type="series" group-title="Series | Test",Testbeelden S01E02 Geavanceerd TS
+https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8
+#EXTINF:-1 tvg-name="Testbeelden S01E03 Klassiek 16x9" tvg-logo="https://app.topplayer.local/demo/testbeeld.svg" tvg-type="series" group-title="Series | Test",Testbeelden S01E03 Klassiek 16x9
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8

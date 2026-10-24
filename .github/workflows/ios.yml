@@ -1,0 +1,13 @@
+name: ios
+on:
+  workflow_dispatch:
+  push:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+jobs:
+  core:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift tests (core logic, database, importer)
+        working-directory: ios
+        run: swift test 2>&1 | tail -150
