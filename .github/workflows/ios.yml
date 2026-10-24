@@ -20,3 +20,35 @@ jobs:
         run: |
           swift test > test.log 2>&1 || { grep -E "error:|failed|XCTAssert" test.log | sort -u | head -80; exit 1; }
           grep -E "Executed" test.log | tail -2
+  app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        shell: bash
+        working-directory: ios
+        run: |
+          brew install xcodegen > brew.log 2>&1 || { tail -20 brew.log; exit 1; }
+          xcodegen generate
+      - name: Build for the simulator
+        shell: bash
+        working-directory: ios
+        run: |
+          xcodebuild -project Topplayer.xcodeproj -scheme Topplayer -sdk iphonesimulator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-sim CODE_SIGNING_ALLOWED=NO build > sim.log 2>&1 \
+            || { grep -E "error:" sim.log | sort -u | head -60; tail -15 sim.log; exit 1; }
+          echo "simulator build ok"
+      - name: Build the unsigned .ipa for iPhone and iPad
+        shell: bash
+        working-directory: ios
+        run: |
+          xcodebuild -project Topplayer.xcodeproj -scheme Topplayer -sdk iphoneos -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build-dev CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > dev.log 2>&1 \
+            || { grep -E "error:" dev.log | sort -u | head -60; tail -15 dev.log; exit 1; }
+          rm -rf Payload && mkdir Payload && cp -R build-dev/Build/Products/Release-iphoneos/Topplayer.app Payload/
+          zip -qr Topplayer-unsigned.ipa Payload
+          ls -la Topplayer-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Topplayer-unsigned-ipa
+          path: ios/Topplayer-unsigned.ipa

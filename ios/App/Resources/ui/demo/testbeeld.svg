@@ -1,0 +1,7 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 600' width='400' height='600'>
+<defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#222'/><stop offset='1' stop-color='#0a0a0a'/></linearGradient>
+<linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='.4' stop-color='#000' stop-opacity='0'/><stop offset='1' stop-color='#000' stop-opacity='.8'/></linearGradient></defs>
+<rect width='400' height='600' fill='url(#g)'/><rect x='0.0' y='0' width='58.1' height='360' fill='#c0c0c0'/><rect x='57.1' y='0' width='58.1' height='360' fill='#c0c000'/><rect x='114.3' y='0' width='58.1' height='360' fill='#00c0c0'/><rect x='171.4' y='0' width='58.1' height='360' fill='#00c000'/><rect x='228.6' y='0' width='58.1' height='360' fill='#c000c0'/><rect x='285.7' y='0' width='58.1' height='360' fill='#c00000'/><rect x='342.9' y='0' width='58.1' height='360' fill='#0000c0'/><rect width='400' height='600' fill='url(#s)'/>
+<rect x='40' y='414' width='44' height='6' rx='3' fill='#fff'/><text x='40' y='480' font-family='Inter,Roboto,Arial,sans-serif' font-size='50' font-weight='800' fill='#fff'>Testbeelden</text>
+<text x='40' y='524' font-family='Inter,Roboto,Arial,sans-serif' font-size='22' font-weight='600' fill='#fff' fill-opacity='.75'>Serie · 3 afleveringen</text>
+</svg>

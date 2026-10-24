@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Topplayer</title>
+<style>
+  :root { --bg: #0a0c14; --card: #151a2a; --line: rgba(255,255,255,.08); --text: #f3f5fa; --text2: #a7aec0; --accent: #ff5e62; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 20px 16px 48px; }
+  main { max-width: 560px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 12px; margin: 8px 0 22px; }
+  header svg { width: 34px; height: 34px; color: var(--accent); }
+  header h1 { font-size: 24px; margin: 0; }
+  header small { display: block; color: var(--text2); font-size: 13px; font-weight: 500; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 17px; margin: 0 0 6px; }
+  p { color: var(--text2); font-size: 14px; line-height: 1.5; margin: 0 0 14px; }
+  label { display: block; font-size: 13px; color: var(--text2); margin: 12px 0 6px; font-weight: 600; }
+  input[type=text], input[type=url] { width: 100%; font: inherit; font-size: 16px; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line); background: #0d1120; color: var(--text); outline: none; }
+  input:focus { border-color: var(--accent); }
+  button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 16px; font: inherit; font-size: 16px; font-weight: 700; padding: 14px; border-radius: 14px; border: 0; background: var(--accent); color: #fff; text-decoration: none; cursor: pointer; }
+  button.ghost, .button.ghost { background: rgba(255,255,255,.08); color: var(--text); }
+  button:disabled { opacity: .5; }
+  input[type=file] { display: none; }
+  .msg { margin-top: 12px; font-size: 14px; padding: 10px 12px; border-radius: 10px; display: none; }
+  .msg.ok { display: block; background: rgba(47,202,116,.15); color: #7ee2a8; }
+  .msg.err { display: block; background: rgba(255,94,98,.15); color: #ff9a9c; }
+  .pls { color: var(--text2); font-size: 13px; margin-top: 4px; }
+  footer { color: #5d6478; font-size: 12px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.6v14.8c0 .8.9 1.3 1.6.9l11.6-7.4c.6-.4.6-1.4 0-1.8L8.6 3.7C7.9 3.3 7 3.8 7 4.6z"/></svg>
+    <div><h1>Topplayer</h1><small id="device"></small></div>
+  </header>
+
+  <section id="add">
+    <h2 data-t="addTitle"></h2>
+    <p data-t="addText"></p>
+    <label for="name" data-t="name"></label>
+    <input id="name" type="text" autocomplete="off">
+    <label for="url" data-t="url"></label>
+    <input id="url" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="http://…">
+    <button id="send" data-t="send"></button>
+    <div id="sendMsg" class="msg"></div>
+    <div class="pls" id="pls"></div>
+  </section>
+
+  <section>
+    <h2 data-t="fileTitle"></h2>
+    <p data-t="fileText"></p>
+    <label class="button ghost" for="file" data-t="pickFile"></label>
+    <input id="file" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/x-mpegurl,application/vnd.apple.mpegurl,text/plain">
+    <div id="fileMsg" class="msg"></div>
+  </section>
+
+  <section id="backup">
+    <h2 data-t="backupTitle"></h2>
+    <p data-t="backupText"></p>
+    <a id="download" class="button ghost" href="/api/backup" download="topplayer-backup.json" data-t="download"></a>
+    <label class="button ghost" for="restore" data-t="restore"></label>
+    <input id="restore" type="file" accept=".json,application/json">
+    <div id="restoreMsg" class="msg"></div>
+  </section>
+  <footer>Topplayer</footer>
+</main>
+<script>
+var T = {
+  nl: { addTitle: 'Playlist toevoegen', addText: 'Plak hier de M3U link van je IPTV aanbieder. Je TV laadt de playlist meteen.', name: 'Naam', url: 'M3U link', send: 'Naar de TV sturen',
+    sent: 'Gelukt! Kijk op je TV, de playlist wordt nu geladen.', bad: 'Dit lijkt geen geldige link. Hij moet met http:// of https:// beginnen.', err: 'Er ging iets mis: ',
+    fileTitle: 'M3U bestand uploaden', fileText: 'Heb je een .m3u bestand? Kies het hier en het gaat direct naar je TV.', pickFile: 'Bestand kiezen', uploading: 'Uploaden…',
+    backupTitle: 'Back-up', backupText: 'Sla je playlists, favorieten, kijkgeschiedenis en instellingen op, of zet een eerdere back-up terug op deze TV.', download: 'Back-up downloaden', restore: 'Back-up terugzetten', restored: 'Back-up teruggezet.',
+    current: 'Op deze TV: ' },
+  en: { addTitle: 'Add playlist', addText: 'Paste the M3U link from your IPTV provider. Your TV loads the playlist right away.', name: 'Name', url: 'M3U link', send: 'Send to TV',
+    sent: 'Done! Check your TV, the playlist is loading now.', bad: 'This does not look like a valid link. It has to start with http:// or https://.', err: 'Something went wrong: ',
+    fileTitle: 'Upload M3U file', fileText: 'Got an .m3u file? Pick it here and it goes straight to your TV.', pickFile: 'Choose file', uploading: 'Uploading…',
+    backupTitle: 'Backup', backupText: 'Save your playlists, favourites, watch history and settings, or restore an earlier backup to this TV.', download: 'Download backup', restore: 'Restore backup', restored: 'Backup restored.',
+    current: 'On this TV: ' }
+};
+var TOKEN = new URLSearchParams(location.search).get('t') || '';
+function api(url, o) { o = o || {}; o.headers = Object.assign({}, o.headers, { 'X-Token': TOKEN }); return fetch(url, o); }
+var L = T.nl;
+function $(id) { return document.getElementById(id); }
+function apply() { document.querySelectorAll('[data-t]').forEach(function (e) { e.textContent = L[e.getAttribute('data-t')]; }); }
+function msg(id, ok, text) { var m = $(id); m.className = 'msg ' + (ok ? 'ok' : 'err'); m.textContent = text; }
+apply();
+api('/api/info').then(function (r) { return r.json(); }).then(function (i) {
+  L = T[i.lang] || T.nl; apply();
+  document.documentElement.lang = i.lang || 'nl';
+  $('device').textContent = (i.device || '') + ' · v' + (i.version || '');
+  if (i.playlists && i.playlists.length) $('pls').textContent = L.current + i.playlists.join(', ');
+}).catch(function () {});
+$('send').onclick = function () {
+  var url = $('url').value.trim();
+  if (!/^https?:\/\/\S+/i.test(url)) { msg('sendMsg', false, L.bad); return; }
+  $('send').disabled = true;
+  api('/api/playlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('name').value.trim() || 'Playlist', url: url }) })
+    .then(function (r) { return r.json(); })
+    .then(function (r) { if (r.ok) { msg('sendMsg', true, L.sent); $('url').value = ''; } else msg('sendMsg', false, L.err + (r.error || '')); })
+    .catch(function (e) { msg('sendMsg', false, L.err + e.message); })
+    .then(function () { $('send').disabled = false; });
+};
+$('file').onchange = function () {
+  var f = this.files[0]; if (!f) return;
+  msg('fileMsg', true, L.uploading);
+  api('/api/playlist-file', { method: 'POST', headers: { 'X-Name': encodeURIComponent(f.name.replace(/\.[^.]+$/, '')) }, body: f })
+    .then(function (r) { return r.json(); })
+    .then(function (r) { r.ok ? msg('fileMsg', true, L.sent) : msg('fileMsg', false, L.err + (r.error || '')); })
+    .catch(function (e) { msg('fileMsg', false, L.err + e.message); });
+};
+$('restore').onchange = function () {
+  var f = this.files[0]; if (!f) return;
+  f.text().then(function (txt) {
+    return api('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: txt });
+  }).then(function (r) { return r.json(); })
+    .then(function (r) { r.ok ? msg('restoreMsg', true, L.restored) : msg('restoreMsg', false, L.err + (r.error || '')); })
+    .catch(function (e) { msg('restoreMsg', false, L.err + e.message); });
+};
+$('download').href = '/api/backup?t=' + encodeURIComponent(TOKEN);
+if (location.hash === '#backup') setTimeout(function () { $('backup').scrollIntoView(); }, 300);
+</script>
+</body>
+</html>

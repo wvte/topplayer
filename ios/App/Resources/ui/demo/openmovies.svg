@@ -1,0 +1,7 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 600' width='400' height='600'>
+<defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#ff5e62'/><stop offset='1' stop-color='#5a1630'/></linearGradient>
+<linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='.4' stop-color='#000' stop-opacity='0'/><stop offset='1' stop-color='#000' stop-opacity='.8'/></linearGradient></defs>
+<rect width='400' height='600' fill='url(#g)'/><rect x='40' y='120' width='48' height='200' rx='10' fill='#fff' fill-opacity='0.1'/><rect x='104' y='120' width='48' height='200' rx='10' fill='#fff' fill-opacity='0.15000000000000002'/><rect x='168' y='120' width='48' height='200' rx='10' fill='#fff' fill-opacity='0.2'/><rect x='232' y='120' width='48' height='200' rx='10' fill='#fff' fill-opacity='0.25'/><rect x='296' y='120' width='48' height='200' rx='10' fill='#fff' fill-opacity='0.30000000000000004'/><rect width='400' height='600' fill='url(#s)'/>
+<rect x='40' y='360' width='44' height='6' rx='3' fill='#fff'/><text x='40' y='426' font-family='Inter,Roboto,Arial,sans-serif' font-size='50' font-weight='800' fill='#fff'>Open</text><text x='40' y='480' font-family='Inter,Roboto,Arial,sans-serif' font-size='50' font-weight='800' fill='#fff'>Movies</text>
+<text x='40' y='524' font-family='Inter,Roboto,Arial,sans-serif' font-size='22' font-weight='600' fill='#fff' fill-opacity='.75'>Serie · 4 afleveringen</text>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 600' width='400' height='600'>
+<defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#3a4f8f'/><stop offset='1' stop-color='#121a38'/></linearGradient>
+<linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='.4' stop-color='#000' stop-opacity='0'/><stop offset='1' stop-color='#000' stop-opacity='.8'/></linearGradient></defs>
+<rect width='400' height='600' fill='url(#g)'/><path d='M0 380 L110 200 L170 290 L250 150 L400 360 V600 H0Z' fill='#cfe0ff' fill-opacity='.18'/><path d='M0 430 L90 320 L190 420 L300 280 L400 400 V600 H0Z' fill='#0d1430' fill-opacity='.6'/><circle cx='300' cy='110' r='4' fill='#fff'/><circle cx='120' cy='80' r='3' fill='#fff'/><circle cx='220' cy='60' r='2.5' fill='#fff'/><rect width='400' height='600' fill='url(#s)'/>
+<rect x='40' y='414' width='44' height='6' rx='3' fill='#8fb4ff'/><text x='40' y='480' font-family='Inter,Roboto,Arial,sans-serif' font-size='50' font-weight='800' fill='#fff'>Sintel</text>
+<text x='40' y='524' font-family='Inter,Roboto,Arial,sans-serif' font-size='22' font-weight='600' fill='#fff' fill-opacity='.75'>2010</text>
+</svg>

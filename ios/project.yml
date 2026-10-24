@@ -1,0 +1,44 @@
+name: Topplayer
+options:
+  bundleIdPrefix: com.topplayer
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+packages:
+  TopplayerCore:
+    path: .
+targets:
+  Topplayer:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes: ["Resources"]
+      - path: App/Resources/ui
+        type: folder
+      - path: App/Resources/demo.m3u
+    dependencies:
+      - package: TopplayerCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.topplayer.ios
+        MARKETING_VERSION: "1.0.10"
+        CURRENT_PROJECT_VERSION: "11"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Topplayer
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UIViewControllerBasedStatusBarAppearance: false
+        UIBackgroundModes: [audio]
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsArbitraryLoadsInWebContent: true
+        ITSAppUsesNonExemptEncryption: false
