@@ -5,6 +5,7 @@ public typealias Row = [String: Any]
 
 public struct DbError: Error, LocalizedError {
     public let message: String
+    public init(message: String) { self.message = message }
     public var errorDescription: String? { message }
 }
 

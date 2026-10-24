@@ -80,6 +80,7 @@ public final class Importer {
                 } else {
                     progress(pid, "download", 0, 0)
                     try Net.download(url, ua: ua, to: file) { [self] d, t in progress(pid, "download", d, max(0, t)) }
+                    try Gzip.inflateInPlace(file)
                 }
                 downloaded = Date()
                 progress(pid, "parse", 0, 0)

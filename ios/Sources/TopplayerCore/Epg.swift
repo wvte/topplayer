@@ -62,7 +62,7 @@ public final class EpgImporter {
                 for (i, u) in urls.enumerated() {
                     let f = cacheDir.appendingPathComponent("epg_\(i).xml")
                     emit("epg.progress", ["phase": "download"])
-                    if (try? Net.download(u, to: f)) != nil { files.append(f) }
+                    if (try? Net.download(u, to: f)) != nil, (try? Gzip.inflateInPlace(f)) != nil { files.append(f) }
                 }
                 if files.isEmpty { throw DbError(message: "EPG download failed") }
                 let c = try Connection(path: dbPath)

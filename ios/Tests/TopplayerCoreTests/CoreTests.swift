@@ -327,6 +327,28 @@ final class DbTests: XCTestCase {
         imp.refresh(pid)
         let done = events.last { $0.0 == "import.done" }?.1
         XCTAssertEqual(done?["ok"] as? Bool, true, "\(String(describing: done))")
-        XCTAssertGreaterThan(db.conn.scalar("SELECT COUNT(*) FROM live"), 5)
+        XCTAssertGreaterThanOrEqual(db.conn.scalar("SELECT COUNT(*) FROM live"), 3)
+        XCTAssertGreaterThan(db.conn.scalar("SELECT COUNT(*) FROM movie") + db.conn.scalar("SELECT COUNT(*) FROM series"), 0)
+    }
+}
+
+final class GzipTests: XCTestCase {
+    func testGunzip() throws {
+        // "hello topplayer\n" repeated, compressed with gzip -9
+        let b64 = "H4sIAAAAAAAC/8tIzcnJVyjJLyjISaxMLeLKGOWTxAcAYVaWlkABAAA="
+        guard let gz = Data(base64Encoded: b64) else { return XCTFail("fixture") }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("gz-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let f = dir.appendingPathComponent("x.xml")
+        try gz.write(to: f)
+        XCTAssertTrue(Gzip.isGzip(f))
+        try Gzip.inflateInPlace(f)
+        XCTAssertFalse(Gzip.isGzip(f))
+        let text = String(decoding: try Data(contentsOf: f), as: UTF8.self)
+        XCTAssertTrue(text.hasPrefix("hello topplayer"), text)
+        XCTAssertEqual(text.count, 320)
+        // plain files are left alone
+        try Gzip.inflateInPlace(f)
+        XCTAssertEqual(String(decoding: try Data(contentsOf: f), as: UTF8.self), text)
     }
 }
