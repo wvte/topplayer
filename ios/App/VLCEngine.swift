@@ -16,6 +16,11 @@ final class VLCEngine: NSObject, VLCMediaPlayerDelegate {
     private var aspect = "fit"
     private var retries = 0
     private var sentVideoSize = false
+    // VLC keeps reporting "buffering" now and then while the picture runs; only a real stall may show the dots
+    private var started = false
+    private var stalled = false
+    private var lastPos = -1
+    private var stallTicks = 0
     private var audioLang = ""
     private var subLang = ""
     private var subsOn = false
@@ -57,6 +62,10 @@ final class VLCEngine: NSObject, VLCMediaPlayerDelegate {
         player.media = media
         mp = player
         sentVideoSize = false
+        started = false
+        stalled = false
+        lastPos = -1
+        stallTicks = 0
         pendingStart = startMs > 0 && !live
         player.play()
         player.rate = speed
@@ -186,9 +195,11 @@ final class VLCEngine: NSObject, VLCMediaPlayerDelegate {
         guard let p = mp else { return }
         switch p.state {
         case .opening, .buffering:
-            emit("player.state", ["state": "buffering", "playing": false, "live": live])
+            if !started { emit("player.state", ["state": "buffering", "playing": false, "live": live]) }
         case .playing:
             retries = 0
+            started = true
+            stalled = false
             if pendingStart { pendingStart = false; seekTo(startMs) }
             emit("player.state", ["state": "ready", "playing": true, "live": live])
             applyPreferredTracks()
@@ -230,6 +241,24 @@ final class VLCEngine: NSObject, VLCMediaPlayerDelegate {
         let len = Int(p.media?.length.intValue ?? 0)
         let pos = Int(max(0, p.time.intValue))
         emit("player.time", ["pos": pos, "dur": live ? 0 : max(0, len), "buf": pos + 3000, "playing": p.isPlaying, "live": live || len <= 0])
+        // picture is moving: the dots must go (also when VLC forgot to say "playing")
+        if p.isPlaying {
+            if pos != lastPos {
+                stallTicks = 0
+                if !started || stalled {
+                    started = true
+                    stalled = false
+                    emit("player.state", ["state": "ready", "playing": true, "live": live])
+                }
+            } else if started {
+                stallTicks += 1
+                if stallTicks >= 3 && !stalled {
+                    stalled = true
+                    emit("player.state", ["state": "buffering", "playing": false, "live": live])
+                }
+            }
+        }
+        lastPos = pos
         let s = p.videoSize
         if !sentVideoSize, s.width > 0, s.height > 0 {
             sentVideoSize = true
