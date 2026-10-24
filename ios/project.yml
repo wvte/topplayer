@@ -40,5 +40,4 @@ targets:
         UIBackgroundModes: [audio]
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-          NSAllowsArbitraryLoadsInWebContent: true
         ITSAppUsesNonExemptEncryption: false
