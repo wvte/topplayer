@@ -22,6 +22,8 @@ jobs:
           grep -E "Executed" test.log | tail -2
   app:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Generate the Xcode project
@@ -52,3 +54,15 @@ jobs:
         with:
           name: Topplayer-unsigned-ipa
           path: ios/Topplayer-unsigned.ipa
+      - name: Put the .ipa in downloads/
+        shell: bash
+        run: |
+          mkdir -p downloads
+          cp ios/Topplayer-unsigned.ipa downloads/Topplayer-iOS-unsigned.ipa
+          (cd downloads && shasum -a 256 Topplayer-iOS-unsigned.ipa > Topplayer-iOS-unsigned.sha256)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/Topplayer-iOS-unsigned.ipa downloads/Topplayer-iOS-unsigned.sha256
+          git commit -m "iOS: unsigned .ipa from CI (${GITHUB_SHA::7})" || exit 0
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
