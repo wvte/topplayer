@@ -1,3 +1,4 @@
+import AVKit
 import UIKit
 import WebKit
 import TopplayerCore
@@ -107,6 +108,15 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
             if target != .unknown { UIDevice.current.setValue(target.rawValue, forKey: "orientation") }
             UIViewController.attemptRotationToDeviceOrientation()
         }
+    }
+
+    /// iOS has no call to open the AirPlay list, so press the button of a route picker that is not shown.
+    func showAirPlayPicker() {
+        let picker = AVRoutePickerView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        picker.alpha = 0.01
+        view.addSubview(picker)
+        for sub in picker.subviews { if let b = sub as? UIButton { b.sendActions(for: .touchUpInside) } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { picker.removeFromSuperview() }
     }
 
     func setBackground(hex: String) {

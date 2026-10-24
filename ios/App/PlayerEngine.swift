@@ -1,4 +1,5 @@
 import AVFoundation
+import AVKit
 import UIKit
 
 /// A view whose layer is an AVPlayerLayer (sits behind the transparent web view, like the video surface on Android).
@@ -9,7 +10,7 @@ final class PlayerView: UIView {
 
 /// Playback with AVPlayer. Speaks the same events as the Android player (player.state, player.time, ...).
 /// AVPlayer plays HLS (.m3u8) and mp4/mov; other containers (mkv, raw .ts) are not supported by iOS itself.
-final class PlayerEngine: NSObject {
+final class PlayerEngine: NSObject, AVPictureInPictureControllerDelegate {
     let view = PlayerView()
     private let emit: (String, [String: Any]) -> Void
     private var player: AVPlayer?
@@ -18,6 +19,7 @@ final class PlayerEngine: NSObject {
     private var playerObs: [NSKeyValueObservation] = []
     private var itemObs: [NSKeyValueObservation] = []
     private var endObserver: NSObjectProtocol?
+    private var pip: AVPictureInPictureController?
 
     private var url = ""
     private var ua = ""
@@ -72,6 +74,11 @@ final class PlayerEngine: NSObject {
             player = AVPlayer()
             player?.automaticallyWaitsToMinimizeStalling = true
             view.playerLayer.player = player
+            if AVPictureInPictureController.isPictureInPictureSupported() {
+                pip = AVPictureInPictureController(playerLayer: view.playerLayer)
+                pip?.delegate = self
+                if #available(iOS 14.2, *) { pip?.canStartPictureInPictureAutomaticallyFromInline = true }
+            }
             playerObs.append(player!.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in self?.emitState() })
         }
         itemObs.append(it.observe(\.status, options: [.new]) { [weak self] i, _ in self?.itemStatusChanged(i) })
@@ -104,6 +111,7 @@ final class PlayerEngine: NSObject {
         teardownItem()
         playerObs.forEach { $0.invalidate() }
         playerObs = []
+        pip = nil
         player = nil
         view.playerLayer.player = nil
         url = ""
@@ -153,6 +161,21 @@ final class PlayerEngine: NSObject {
         subLang = a["subLang"] as? String ?? subLang
         subsOn = a["subsOn"] as? Bool ?? subsOn
         applyPreferredTracks()
+    }
+
+    // MARK: picture in picture
+
+    func togglePictureInPicture() {
+        guard let p = pip else { return }
+        if p.isPictureInPictureActive { p.stopPictureInPicture() }
+        else if p.isPictureInPicturePossible { p.startPictureInPicture() }
+    }
+
+    func pictureInPictureControllerDidStartPictureInPicture(_ c: AVPictureInPictureController) { emit("player.pip", ["active": true]) }
+    func pictureInPictureControllerDidStopPictureInPicture(_ c: AVPictureInPictureController) { emit("player.pip", ["active": false]) }
+    func pictureInPictureController(_ c: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler done: @escaping (Bool) -> Void) {
+        emit("player.pip", ["active": false, "restore": true])
+        done(true)
     }
 
     // MARK: tracks
