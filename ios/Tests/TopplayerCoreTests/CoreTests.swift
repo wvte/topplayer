@@ -184,6 +184,22 @@ final class XtreamTests: XCTestCase {
         XCTAssertNotNil((p.details["episodes"] as? [String: Any])?["1|2"])
     }
 
+    func testSeriesInfoOddShapes() {
+        let a = XtreamAccount.parse("http://h:80/get.php?username=u&password=p")!
+        func eps(_ json: String) -> [XtreamImporter.Episode] {
+            XtreamImporter.parseSeriesInfo(try! JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any], a).episodes
+        }
+        // seasons as objects instead of lists, season "0" in the episode
+        let d = eps(#"{"episodes":{"2":{"0":{"id":11,"episode_num":"1","season":"0"},"1":{"id":12,"episode_num":"2"}}}}"#)
+        XCTAssertEqual(d.count, 2)
+        XCTAssertEqual(d.first?.season, 2)
+        XCTAssertEqual(d.first?.url, "http://h:80/series/u/p/11.mp4")
+        // a list of seasons
+        XCTAssertEqual(eps(#"{"episodes":[[{"id":"1","episode_num":1}],[{"id":"2","episode_num":1}]]}"#).map { $0.season }, [1, 2])
+        // one flat list
+        XCTAssertEqual(eps(#"{"episodes":[{"id":"1","episode_num":1,"season":3},{"id":"2","episode_num":2,"season":3}]}"#).count, 2)
+    }
+
     func testEpgTime() {
         XCTAssertEqual(EpgImporter.parseTime("20241006213000 +0200"), 1728243000000)
         XCTAssertEqual(EpgImporter.parseTime("20241006193000"), 1728243000000)

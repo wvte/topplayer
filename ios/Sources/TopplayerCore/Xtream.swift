@@ -268,7 +268,8 @@ public enum XtreamImporter {
                 guard let e = item as? [String: Any] else { continue }
                 let id = (XtreamJSON.str(e["id"]) ?? "").trimmed
                 if id.isEmpty || id == "null" { continue }
-                let season = e["season"] != nil ? XtreamJSON.int(e["season"]) : seasonFromKey
+                var season = XtreamJSON.int(e["season"])
+                if season <= 0 { season = seasonFromKey }
                 var number = XtreamJSON.int(e["episode_num"])
                 if number <= 0 { number = i + 1 }
                 if !seen.insert("\(season)|\(number)").inserted { continue }
@@ -285,10 +286,19 @@ public enum XtreamImporter {
                 perEpisode["\(season)|\(number)"] = o
             }
         }
+        // Servers differ: {"1": [..]}, {"1": {"0": {..}}}, [[..], [..]] or one flat list of episodes.
+        func list(_ v: Any?) -> [Any]? {
+            if let a = v as? [Any] { return a }
+            if let d = v as? [String: Any] {
+                if d["id"] != nil { return [d] }
+                return d.sorted { (Int($0.key) ?? 0, $0.key) < (Int($1.key) ?? 0, $1.key) }.map { $0.value }
+            }
+            return nil
+        }
         if let em = r["episodes"] as? [String: Any] {
-            for (key, value) in em { add(value as? [Any], Int(key.trimmed) ?? 0) }
+            for (key, value) in em.sorted(by: { (Int($0.key.trimmed) ?? 0) < (Int($1.key.trimmed) ?? 0) }) { add(list(value), Int(key.trimmed) ?? 0) }
         } else if let ea = r["episodes"] as? [Any] {
-            for item in ea { add(item as? [Any], 0) }
+            if ea.first is [String: Any] { add(ea, 1) } else { for (i, item) in ea.enumerated() { add(list(item), i + 1) } }
         }
         details["episodes"] = perEpisode
         return (eps, details)
@@ -301,7 +311,16 @@ public final class XtreamExtras {
     private let lock = NSLock()
     private static let day: Double = 24 * 3600 * 1000
 
+    /// Episodes that could not be saved (the database was busy with an import); the detail page still shows them.
+    private var memory: [String: [Row]] = [:]
+    private var memoryDetails: [String: [String: Any]] = [:]
+
     public init(db: Db) { self.db = db }
+
+    public func memoryEpisodes(_ key: String) -> [Row]? {
+        lock.lock(); defer { lock.unlock() }
+        return memory[key]
+    }
 
     private func cached(_ key: String, maxAge: Double) -> [String: Any]? {
         guard let v = db.kvGet(key), let o = (try? JSONSerialization.jsonObject(with: Data(v.utf8))) as? [String: Any] else { return nil }
@@ -354,6 +373,7 @@ public final class XtreamExtras {
     public func ensureEpisodes(_ key: String) throws {
         guard var s = try db.conn.one(Self.seriesRow, [key]), (s["xt_id"] as? Int64 ?? 0) > 0, needsEpisodes(s) else { return }
         lock.lock(); defer { lock.unlock() }
+        if memory[key] != nil { return } // fetched a moment ago, still being saved
         guard let again = try db.conn.one(Self.seriesRow, [key]), needsEpisodes(again) else { return }
         s = again
         let have = db.conn.scalar("SELECT COUNT(*) FROM episode WHERE series_id=?", [s["id"] as? Int64 ?? 0]) > 0
@@ -363,23 +383,45 @@ public final class XtreamExtras {
     private func fetchEpisodes(_ s: Row) throws {
         guard let a = XtreamAccount.parse(s["purl"] as? String) else { return }
         let id = s["id"] as? Int64 ?? 0
+        let pid = s["pid"] as? Int64 ?? 0
         let data = try Net.getData(a.api("get_series_info") + "&series_id=\(s["xt_id"] as? Int64 ?? 0)", ua: s["pua"] as? String)
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { throw DbError(message: "Xtream API: unexpected answer") }
         let parsed = XtreamImporter.parseSeriesInfo(root, a)
-        if parsed.episodes.isEmpty { return }
+        if parsed.episodes.isEmpty { throw DbError(message: "Xtream API: no episodes for this series") }
         let key = s["k"] as? String ?? ""
         let base = key.hasPrefix("S|") ? String(key.dropFirst(2)) : key
-        try db.conn.transaction {
-            try db.conn.run("DELETE FROM episode WHERE series_id=?", [id])
-            var seasons = Set<Int>()
-            for (ord, e) in parsed.episodes.enumerated() {
-                try db.conn.run("INSERT INTO episode(pid,series_id,k,season,ep,name,url,logo,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,NULL,NULL,?)",
-                                [s["pid"] as? Int64 ?? 0, id, "E|\(base)|\(e.season)|\(e.number)", e.season, e.number, e.name, e.url, e.logo, ord])
-                seasons.insert(e.season)
-            }
-            try db.conn.run("UPDATE series SET n_eps=?, n_seasons=?, xt_sync=? WHERE id=?", [parsed.episodes.count, seasons.count, Db.nowMs(), id])
+        // Shown right away from memory; saving can wait when an import keeps the database busy.
+        memory[key] = parsed.episodes.enumerated().map { (ord, e) in
+            ["k": "E|\(base)|\(e.season)|\(e.number)", "season": Int64(e.season), "ep": Int64(e.number), "name": e.name, "url": e.url, "logo": e.logo, "ord": Int64(ord)] as Row
         }
-        store("xt:s:\(s["pid"] as? Int64 ?? 0):\(key)", parsed.details)
+        memoryDetails[key] = parsed.details
+        DispatchQueue.global(qos: .utility).async { [self] in
+            // its own connection, so waiting for a busy database never holds up the app's connection
+            guard let c = try? Connection(path: db.path) else { return }
+            var saved = false
+            for attempt in 0..<20 where !saved {
+                if attempt > 0 { Thread.sleep(forTimeInterval: 15) }
+                do {
+                    try c.transaction {
+                        try c.run("DELETE FROM episode WHERE series_id=?", [id])
+                        var seasons = Set<Int>()
+                        for (ord, e) in parsed.episodes.enumerated() {
+                            try c.run("INSERT INTO episode(pid,series_id,k,season,ep,name,url,logo,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,NULL,NULL,?)",
+                                      [pid, id, "E|\(base)|\(e.season)|\(e.number)", e.season, e.number, e.name, e.url, e.logo, ord])
+                            seasons.insert(e.season)
+                        }
+                        try c.run("UPDATE series SET n_eps=?, n_seasons=?, xt_sync=? WHERE id=?", [parsed.episodes.count, seasons.count, Db.nowMs(), id])
+                        var o = parsed.details
+                        o["_at"] = Db.nowMs()
+                        if let d = try? JSONSerialization.data(withJSONObject: o), let js = String(data: d, encoding: .utf8) {
+                            try c.run("INSERT OR REPLACE INTO kv(k,v) VALUES(?,?)", ["xt:s:\(pid):\(key)", js])
+                        }
+                    }
+                    saved = true
+                } catch { /* busy: try again later */ }
+            }
+            if saved { lock.lock(); memory[key] = nil; memoryDetails[key] = nil; lock.unlock() }
+        }
     }
 
     public func seriesInfo(_ key: String) throws -> [String: Any]? {
@@ -388,6 +430,8 @@ public final class XtreamExtras {
         // Only series that came from the API have an id; the guess-by-name fallback of the Android app is not needed here.
         if (s["xt_id"] as? Int64 ?? 0) > 0 {
             try? ensureEpisodes(key)
+            lock.lock(); let mem = memoryDetails[key]; lock.unlock()
+            if let mem = mem { return mem }
             return cached("xt:s:\(s["pid"] as? Int64 ?? 0):\(key)", maxAge: 7 * Self.day)
         }
         return nil

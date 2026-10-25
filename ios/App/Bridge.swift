@@ -104,9 +104,22 @@ final class Bridge: NSObject, WKScriptMessageHandler {
     }
 
     private func refreshAsync(_ id: Int64, epgAfter: Bool) {
-        importQueue.async { [self] in
+        background { [self] in
             importer.refresh(id)
             if epgAfter { epg.refresh() }
+        }
+    }
+
+    /// Imports run on their own queue and ask iOS for extra time, so switching apps halfway does not freeze them.
+    private func background(_ work: @escaping () -> Void) {
+        importQueue.async {
+            var task = UIBackgroundTaskIdentifier.invalid
+            task = UIApplication.shared.beginBackgroundTask(withName: "import") {
+                UIApplication.shared.endBackgroundTask(task)
+                task = .invalid
+            }
+            work()
+            if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
         }
     }
 
@@ -190,10 +203,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
                 }
             }
             let last = db.kvGet("epg_updated").flatMap { Int64($0) }
-            if n > 0 || last == nil || now - last! > 12 * 3_600_000 { importQueue.async { self.epg.refresh() } }
+            if n > 0 || last == nil || now - last! > 12 * 3_600_000 { background { self.epg.refresh() } }
             return n
         case "epg.refresh":
-            importQueue.async { self.epg.refresh() }
+            background { self.epg.refresh() }
             return nil
         case "epg.status":
             return ["running": epg.isRunning, "updated": db.kvGet("epg_updated") as Any, "count": db.conn.scalar("SELECT COUNT(*) FROM epg")]
@@ -225,6 +238,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             var err: String?
             do { try xtream.ensureEpisodes(k) } catch { err = (error as? DbError)?.message ?? error.localizedDescription }
             guard var sr = try db.series(k) else { return nil }
+            if (sr["episodes"] as? [Row])?.isEmpty ?? true, let mem = xtream.memoryEpisodes(k) { sr["episodes"] = mem; err = nil }
             if let e = err, (sr["episodes"] as? [Row])?.isEmpty ?? true { sr["xt_error"] = e }
             return sr
         case "episode.get": return try db.episode(try need(a, "k"))

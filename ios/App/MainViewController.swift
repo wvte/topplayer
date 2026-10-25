@@ -12,7 +12,8 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
     private var rect: CGRect = .zero
     private var fullVideo = true
 
-    override var prefersStatusBarHidden: Bool { true }
+    override var prefersStatusBarHidden: Bool { OrientationControl.mask == .landscape }
+    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { OrientationControl.mask }
     override var shouldAutorotate: Bool { true }
@@ -100,6 +101,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
         let phone = UIDevice.current.userInterfaceIdiom == .phone
         let mask: UIInterfaceOrientationMask = phone ? (landscape ? .landscape : .portrait) : .all
         OrientationControl.mask = mask
+        setNeedsStatusBarAppearanceUpdate()
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()
             view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }

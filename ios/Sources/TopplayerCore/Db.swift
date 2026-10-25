@@ -5,8 +5,10 @@ import Foundation
 public final class Db {
     public static let version = 3
     public let conn: Connection
+    public let path: String
 
     public init(path: String) throws {
+        self.path = path
         conn = try Connection(path: path)
         try migrate()
     }
