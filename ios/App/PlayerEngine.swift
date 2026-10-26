@@ -42,6 +42,24 @@ final class PlayerEngine: NSObject {
     private static let startAV: TimeInterval = 12
     private static let startVLC: TimeInterval = 25
     private static let stall: TimeInterval = 45
+    private static let startAVLive: TimeInterval = 10
+    private static let startVLCLive: TimeInterval = 20
+
+    /// Xtream servers give every live channel as HLS too (same address, .m3u8): Apple's player starts that fastest.
+    /// Both forms are handled: /live/U/P/123.ts and the short /U/P/123 that m3u lists with output=ts use.
+    static func hlsVariant(_ s: String) -> String? {
+        guard var c = URLComponents(string: s), c.query == nil else { return nil }
+        let parts = c.percentEncodedPath.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        func isId(_ x: String) -> Bool { !x.isEmpty && x.allSatisfy { $0.isNumber } }
+        if parts.count == 4, parts[0] == "live", parts[3].hasSuffix(".ts"), isId(String(parts[3].dropLast(3))) {
+            c.percentEncodedPath = "/live/" + parts[1] + "/" + parts[2] + "/" + String(parts[3].dropLast(3)) + ".m3u8"
+        } else if parts.count == 3, isId(parts[2]), !["live", "movie", "series"].contains(parts[0]) {
+            c.percentEncodedPath = "/live/" + parts.joined(separator: "/") + ".m3u8"
+        } else {
+            return nil
+        }
+        return c.string
+    }
 
     private func armWatchdog() {
         timer?.invalidate()
@@ -71,9 +89,9 @@ final class PlayerEngine: NSObject {
         let now = Date()
         if !started {
             let waited = now.timeIntervalSince(startedAt)
-            if active == .av, waited > Self.startAV, !live || waited > Self.startAV * 2 {
-                _ = switchToVLC()
-            } else if active == .vlc, waited > Self.startVLC, !live {
+            if active == .av, waited > (live ? Self.startAVLive : Self.startAV) {
+                if !switchToVLC() { fail(reason: "START") }
+            } else if active == .vlc, waited > (live ? Self.startVLCLive : Self.startVLC) {
                 fail(reason: "START")
             }
         } else if !live, !userPaused, UIApplication.shared.applicationState == .active, now.timeIntervalSince(lastProgress) > Self.stall {
@@ -191,7 +209,15 @@ final class PlayerEngine: NSObject {
         try? AVAudioSession.sharedInstance().setActive(true)
         // stop the other engine without telling the page that playback ended
         let forced = a["engine"] as? String
-        if forced == "av" || (forced != "vlc" && prefersApple(a)) {
+        let live = a["live"] as? Bool ?? false
+        if live, forced != "vlc", let hls = Self.hlsVariant(a["url"] as? String ?? "") {
+            // the HLS form with Apple's player first; the address as listed goes to VLC if that does not work
+            var b = a
+            b["url"] = hls
+            vlc.stop()
+            show(.av)
+            av.play(b)
+        } else if forced == "av" || (forced != "vlc" && prefersApple(a)) {
             vlc.stop()
             show(.av)
             av.play(a)
