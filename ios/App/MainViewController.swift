@@ -141,4 +141,10 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
         }
         player.setRect(x: x, y: y, w: w, h: h, visible: visible)
     }
+
+    /// iOS can end the web page's process while the app sits in the background; load it again instead of a blank
+    /// screen (the playlists come from the database, nothing is downloaded again).
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        webView.reload()
+    }
 }

@@ -1,8 +1,8 @@
 {
-  "code": 12,
-  "name": "1.0.11",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.11.apk",
-  "sha256": "a6d31bd0b7d8805921b857c450d01eb5671f86e95f1606888af8f3aa09448796",
+  "code": 13,
+  "name": "1.0.12",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.12.apk",
+  "sha256": "5b7fc4746d34192cd0b80133b225bb2d9551fa28239b7a13e81e3556314cb96f",
   "size": 2496634,
-  "notes": "Audio taal: herkent Engels 5.1, english, ENG enzovoort als dezelfde taal. Je keuze per serie wordt onthouden voor de volgende afleveringen."
+  "notes": "De playlist laadt niet meer bij elke start opnieuw. Verversen gebeurt stil op de achtergrond en terug drukken laat de app open staan."
 }

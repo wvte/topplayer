@@ -198,7 +198,13 @@ final class Bridge: NSObject, WKScriptMessageHandler {
                 let hours = Int64(p["auto_hours"] as? Int64 ?? 24)
                 if (p["enabled"] as? Int64 ?? 1) == 0 || hours <= 0 { continue }
                 if now - (p["last_refresh"] as? Int64 ?? 0) > hours * 3_600_000 {
-                    refreshAsync(p["id"] as? Int64 ?? 0, epgAfter: false)
+                    // an attempt that was cut off (app left halfway) is not started again on every launch
+                    let id = p["id"] as? Int64 ?? 0
+                    let tryKey = "pl_try_\(id)"
+                    let hasContent = (p["n_live"] as? Int64 ?? 0) + (p["n_movie"] as? Int64 ?? 0) + (p["n_series"] as? Int64 ?? 0) > 0
+                    if hasContent, let t = db.kvGet(tryKey).flatMap({ Int64($0) }), now - t < 4 * 3_600_000 { continue }
+                    db.kvSet(tryKey, String(now))
+                    refreshAsync(id, epgAfter: false)
                     n += 1
                 }
             }
