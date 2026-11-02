@@ -1,8 +1,8 @@
 {
-  "code": 15,
-  "name": "1.0.14",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.14.apk",
-  "sha256": "c568f9efb10593bacea5badd1b28a16428b8e5228aa35a353c7e7dbee4613212",
+  "code": 16,
+  "name": "1.0.15",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.15.apk",
+  "sha256": "0e49c1d3145f7e4894f2628f48798da05e381b3dec73ac5c2d7305a7e2c52126",
   "size": 2496634,
-  "notes": "Slaaptimer: Verder kijken springt niet meer terug naar een aflevering die je al gezien hebt."
+  "notes": "Slaaptimer menu weer kort en overzichtelijk."
 }
