@@ -1,8 +1,8 @@
 {
-  "code": 13,
-  "name": "1.0.12",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.12.apk",
-  "sha256": "5b7fc4746d34192cd0b80133b225bb2d9551fa28239b7a13e81e3556314cb96f",
+  "code": 14,
+  "name": "1.0.13",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.13.apk",
+  "sha256": "806260426a8f9d5a31b2a11e2e88c3abc1f2c4c3f62c5ac4ef23f11a26fef7ed",
   "size": 2496634,
-  "notes": "De playlist laadt niet meer bij elke start opnieuw. Verversen gebeurt stil op de achtergrond en terug drukken laat de app open staan."
+  "notes": "Verversen op de achtergrond is nu helemaal stil. Nieuwe keuzes: elke 3 dagen of elke week verversen."
 }
