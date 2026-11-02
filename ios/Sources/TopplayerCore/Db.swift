@@ -319,8 +319,13 @@ public final class Db {
         func n(_ k: String) -> Int64 { (p[k] as? NSNumber)?.int64Value ?? 0 }
         let seriesK: String? = (p["series_k"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let done = (p["done"] as? NSNumber)?.boolValue ?? false
-        try conn.run("INSERT OR REPLACE INTO progress(k,kind,title,sub,logo,series_k,season,ep,pos,dur,updated,done,hidden) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)",
-                     [s("k"), s("kind"), s("title"), s("sub"), s("logo"), seriesK, n("season"), n("ep"), n("pos"), n("dur"), Db.nowMs(), done ? 1 : 0])
+        // the time the app gave the save decides, so a late older save never overwrites a newer one
+        let at = n("at") > 0 ? n("at") : Db.nowMs()
+        try conn.transaction { () throws -> Void in
+            if conn.scalar("SELECT COALESCE(MAX(updated),0) FROM progress WHERE k=?", [s("k")]) > at { return }
+            _ = try conn.run("INSERT OR REPLACE INTO progress(k,kind,title,sub,logo,series_k,season,ep,pos,dur,updated,done,hidden) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)",
+                         [s("k"), s("kind"), s("title"), s("sub"), s("logo"), seriesK, n("season"), n("ep"), n("pos"), n("dur"), at, done ? 1 : 0])
+        }
     }
 
     public func progress(_ k: String) throws -> Row? { try conn.one("SELECT * FROM progress WHERE k=?", [k]) }

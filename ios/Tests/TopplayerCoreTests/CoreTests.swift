@@ -209,6 +209,21 @@ final class XtreamTests: XCTestCase {
 }
 
 final class DbTests: XCTestCase {
+
+    func testLateOlderProgressSaveDoesNotWin() throws {
+        let path = NSTemporaryDirectory() + "order_\(UUID().uuidString).db"
+        let db = try Db(path: path)
+        func save(_ k: String, ep: Int, at: Int64, done: Bool) throws {
+            try db.saveProgress(["k": k, "kind": "episode", "series_k": "S|x", "season": 1, "ep": ep, "pos": 1000, "dur": 2000, "done": done, "at": NSNumber(value: at)])
+        }
+        try save("E|x|1|4", ep: 4, at: 2000, done: false)
+        try save("E|x|1|4", ep: 4, at: 1500, done: true) // arrives late: older, must not win
+        XCTAssertEqual(db.conn.scalar("SELECT done FROM progress WHERE k='E|x|1|4'"), 0)
+        XCTAssertEqual(db.conn.scalar("SELECT updated FROM progress WHERE k='E|x|1|4'"), 2000)
+        try save("E|x|1|4", ep: 4, at: 2500, done: true)
+        XCTAssertEqual(db.conn.scalar("SELECT done FROM progress WHERE k='E|x|1|4'"), 1)
+    }
+
     var dir: URL!
     var path: String!
     var db: Db!
