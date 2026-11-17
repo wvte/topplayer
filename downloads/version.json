@@ -1,8 +1,8 @@
 {
-  "code": 16,
-  "name": "1.0.15",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.15.apk",
-  "sha256": "0e49c1d3145f7e4894f2628f48798da05e381b3dec73ac5c2d7305a7e2c52126",
-  "size": 2496634,
-  "notes": "Slaaptimer menu weer kort en overzichtelijk."
+  "code": 17,
+  "name": "1.0.16",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.16.apk",
+  "sha256": "002c44089ea7dee136be2dc21bc32eb4687bcd06c9e8852ad93c57a88d913902",
+  "size": 2500730,
+  "notes": "Links en rechts lopen niet meer vast na typen. Tijdens verversen blijven lijsten zichtbaar en kun je gewoon kijken. Nieuwe ondertekening: eenmalig opnieuw installeren."
 }
