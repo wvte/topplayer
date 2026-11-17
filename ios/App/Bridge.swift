@@ -55,16 +55,48 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             guard let id = (m["id"] as? NSNumber)?.intValue, let method = m["m"] as? String else { return }
             let json = m["j"] as? String ?? "{}"
             let args = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] ?? [:]
-            work.async { [weak self] in self?.dispatch(id, method, args) }
+            if Bridge.writes.contains(method) {
+                writeQueue.async { [weak self] in self?.dispatch(id, method, args, write: true) }
+            } else {
+                work.async { [weak self] in self?.dispatch(id, method, args) }
+            }
         default: break
         }
     }
 
-    private func dispatch(_ id: Int, _ method: String, _ a: [String: Any]) {
+    // Requests that write go one by one over their own connection. While an import holds the database for writing
+    // they wait there (as long as needed) instead of blocking the connection that reading and playing use, so lists
+    // stay on screen and things play during a refresh.
+    private static let writes: Set<String> = ["fav.toggle", "fav.order", "progress.save", "progress.hide", "progress.watched",
+                                              "progress.clear", "recent.add", "history.clear"]
+    private let writeQueue = DispatchQueue(label: "tp.write", qos: .userInitiated)
+    private lazy var writeDb: Db = {
+        guard let d = try? Db(path: dbPath) else { return db }
+        d.conn.setBusyTimeout(ms: 600_000)
+        return d
+    }()
+
+    private func handleWrite(_ m: String, _ a: [String: Any]) throws -> Any? {
+        let w = writeDb
+        switch m {
+        case "fav.toggle": return try w.favToggle(kind: try need(a, "kind"), k: try need(a, "k"), title: s(a, "title"), logo: s(a, "logo"))
+        case "fav.order": try w.favOrder(kind: try need(a, "kind"), keys: (a["keys"] as? [String]) ?? [])
+        case "progress.save": try w.saveProgress(a)
+        case "progress.hide": try w.hideProgress(k: s(a, "k"), seriesK: s(a, "series_k"))
+        case "progress.watched": try w.setWatched(k: try need(a, "k"), done: b(a, "done", true), meta: a["meta"] as? [String: Any])
+        case "progress.clear": return ["removed": try w.clearProgress(scope: s(a, "scope", "one"), seriesK: s(a, "series_k"), k: s(a, "k"))]
+        case "recent.add": try w.addRecent(k: try need(a, "k"), title: s(a, "title"), logo: s(a, "logo"))
+        case "history.clear": try w.clearHistory()
+        default: return try handle(m, a)
+        }
+        return nil
+    }
+
+    private func dispatch(_ id: Int, _ method: String, _ a: [String: Any], write: Bool = false) {
         var ok = true
         var res: String
         do {
-            res = Bridge.json(try handle(method, a))
+            res = Bridge.json(write ? try handleWrite(method, a) : try handle(method, a))
         } catch {
             ok = false
             res = Bridge.json((error as? DbError)?.message ?? error.localizedDescription)
@@ -244,7 +276,12 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             var err: String?
             do { try xtream.ensureEpisodes(k) } catch { err = (error as? DbError)?.message ?? error.localizedDescription }
             guard var sr = try db.series(k) else { return nil }
-            if (sr["episodes"] as? [Row])?.isEmpty ?? true, let mem = xtream.memoryEpisodes(k) { sr["episodes"] = mem; err = nil }
+            if (sr["episodes"] as? [Row])?.isEmpty ?? true, var mem = xtream.memoryEpisodes(k) {
+                // with what was already watched, like the rows from the database
+                for i in mem.indices { if let ek = mem[i]["k"] as? String, let p = try? db.progress(ek) { mem[i]["progress"] = p } }
+                sr["episodes"] = mem
+                err = nil
+            }
             if let e = err, (sr["episodes"] as? [Row])?.isEmpty ?? true { sr["xt_error"] = e }
             return sr
         case "episode.get": return try db.episode(try need(a, "k"))

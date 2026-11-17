@@ -27,6 +27,12 @@ public final class Connection {
 
     deinit { sqlite3_close(handle) }
 
+    /// How long a statement waits for another connection's write to finish (default 8 seconds).
+    public func setBusyTimeout(ms: Int32) {
+        lock.lock(); defer { lock.unlock() }
+        sqlite3_busy_timeout(handle, ms)
+    }
+
     private func message() -> String { String(cString: sqlite3_errmsg(handle)) }
 
     public func exec(_ sql: String) throws {

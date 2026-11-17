@@ -322,7 +322,19 @@ public final class XtreamExtras {
         return memory[key]
     }
 
+    // Info for a film or series is kept in memory and saved on its own connection: a write waits while an import holds
+    // the database, and must not hold up the connection the screens read from.
+    private var memKV: [String: [String: Any]] = [:]
+    private let saveQueue = DispatchQueue(label: "tp.xtream.save", qos: .utility)
+    private lazy var saveConn: Connection? = {
+        let c = try? Connection(path: db.path)
+        c?.setBusyTimeout(ms: 600_000)
+        return c
+    }()
+
     private func cached(_ key: String, maxAge: Double) -> [String: Any]? {
+        lock.lock(); let m = memKV[key]; lock.unlock()
+        if let m = m { return Double(Db.nowMs()) - (m["_at"] as? NSNumber ?? 0).doubleValue > maxAge ? nil : m }
         guard let v = db.kvGet(key), let o = (try? JSONSerialization.jsonObject(with: Data(v.utf8))) as? [String: Any] else { return nil }
         if Double(Db.nowMs()) - (o["_at"] as? NSNumber ?? 0).doubleValue > maxAge { return nil }
         return o
@@ -331,7 +343,12 @@ public final class XtreamExtras {
     private func store(_ key: String, _ o: [String: Any]) {
         var o = o
         o["_at"] = Db.nowMs()
-        if let d = try? JSONSerialization.data(withJSONObject: o), let s = String(data: d, encoding: .utf8) { db.kvSet(key, s) }
+        lock.lock(); memKV[key] = o; lock.unlock()
+        guard let d = try? JSONSerialization.data(withJSONObject: o), let s = String(data: d, encoding: .utf8) else { return }
+        saveQueue.async { [self] in
+            if let c = saveConn { _ = try? c.run("INSERT OR REPLACE INTO kv(k,v) VALUES(?,?)", [key, s]) } else { db.kvSet(key, s) }
+            lock.lock(); memKV[key] = nil; lock.unlock()
+        }
     }
 
     private static func copy(_ from: [String: Any], _ to: inout [String: Any], _ key: String, _ alt: String? = nil) {
@@ -382,7 +399,6 @@ public final class XtreamExtras {
 
     private func fetchEpisodes(_ s: Row) throws {
         guard let a = XtreamAccount.parse(s["purl"] as? String) else { return }
-        let id = s["id"] as? Int64 ?? 0
         let pid = s["pid"] as? Int64 ?? 0
         let data = try Net.getData(a.api("get_series_info") + "&series_id=\(s["xt_id"] as? Int64 ?? 0)", ua: s["pua"] as? String)
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { throw DbError(message: "Xtream API: unexpected answer") }
@@ -402,7 +418,10 @@ public final class XtreamExtras {
             for attempt in 0..<20 where !saved {
                 if attempt > 0 { Thread.sleep(forTimeInterval: 15) }
                 do {
-                    try c.transaction {
+                    try c.transaction { () throws -> Void in
+                        // looked up again: a refresh that finished meanwhile gave the series a new row
+                        let id = c.scalar("SELECT COALESCE(MAX(id),0) FROM series WHERE k=? AND pid=?", [key, pid])
+                        if id <= 0 { return }
                         try c.run("DELETE FROM episode WHERE series_id=?", [id])
                         var seasons = Set<Int>()
                         for (ord, e) in parsed.episodes.enumerated() {
