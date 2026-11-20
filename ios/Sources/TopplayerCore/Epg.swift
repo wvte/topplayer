@@ -78,6 +78,7 @@ public final class EpgImporter {
                     }
                 }
                 db.kvSet("epg_updated", String(Db.nowMs()))
+                db.kvSet("epg_count", String(total)) // the settings page shows it without counting the guide
                 done = ["ok": true, "programmes": total]
             }
         } catch {

@@ -247,7 +247,9 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             background { self.epg.refresh() }
             return nil
         case "epg.status":
-            return ["running": epg.isRunning, "updated": db.kvGet("epg_updated") as Any, "count": db.conn.scalar("SELECT COUNT(*) FROM epg")]
+            // counting the whole guide is slow: the importer keeps the number
+            let count = db.kvGet("epg_count").flatMap { Int64($0) } ?? (epg.isRunning ? 0 : db.conn.scalar("SELECT COUNT(*) FROM epg"))
+            return ["running": epg.isRunning, "updated": db.kvGet("epg_updated") as Any, "count": count]
 
         // content
         case "groups": return try db.groups(kind: try need(a, "kind"), includeHidden: b(a, "all"))
