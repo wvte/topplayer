@@ -1,8 +1,8 @@
 {
-  "code": 17,
-  "name": "1.0.16",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.16.apk",
-  "sha256": "002c44089ea7dee136be2dc21bc32eb4687bcd06c9e8852ad93c57a88d913902",
-  "size": 2500730,
-  "notes": "Links en rechts lopen niet meer vast na typen. Tijdens verversen blijven lijsten zichtbaar en kun je gewoon kijken. Nieuwe ondertekening: eenmalig opnieuw installeren."
+  "code": 18,
+  "name": "1.0.17",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.17.apk",
+  "sha256": "3430fd9f058668ddbf12fdd51e63a3f5b15a8263931795970e2f5a50bac1bf66",
+  "size": 2504826,
+  "notes": "Terug drukken sluit de app echt af. Je ziet nu wanneer de playlist bijwerkt en wanneer afleveringen worden opgehaald, met opnieuw proberen als het mislukt."
 }
