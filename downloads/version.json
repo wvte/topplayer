@@ -1,8 +1,8 @@
 {
-  "code": 19,
-  "name": "1.0.18",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.18.apk",
-  "sha256": "97a1f9c8346ad1e989fe0f7c5b9b2ef1442b2bf8e2d2f8ae551f39f9516875d2",
+  "code": 20,
+  "name": "1.0.19",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.19.apk",
+  "sha256": "4a1d337c764dcf9185e9f2809bf6fdb3ae2218e09cff6ffd4f56c3e335b0c047",
   "size": 2504826,
-  "notes": "Tijdens het verversen blijft alles werken: Home, series, Instellingen Playlists en Over."
+  "notes": "Afsluiten werkt, instellingen en series blijven werken tijdens verversen, en een logboek in Instellingen, Over."
 }
