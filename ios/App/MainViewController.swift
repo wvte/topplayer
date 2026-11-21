@@ -1,10 +1,11 @@
 import AVKit
 import UIKit
+import UniformTypeIdentifiers
 import WebKit
 import TopplayerCore
 
 /// One full screen web view (the UI) over a video view. The web view is see-through while video plays.
-final class MainViewController: UIViewController, WKNavigationDelegate {
+final class MainViewController: UIViewController, WKNavigationDelegate, UIDocumentPickerDelegate {
     private var web: WKWebView!
     private var bridge: Bridge!
     private var player: PlayerEngine!
@@ -46,23 +47,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
         conf.setURLSchemeHandler(SchemeHandler(root: Bundle.main.resourceURL!.appendingPathComponent("ui")), forURLScheme: SchemeHandler.scheme)
         bridge = Bridge(web: nil, db: db, dbPath: dbPath, cacheDir: cache)
 
-        let boot = """
-        window.__TP_IOS = true;
-        window.__TP_PREFS = \(Bridge.json(bridge.prefsJSON));
-        window.__TP_STATE = \(Bridge.json(bridge.stateJSON));
-        (function () {
-          var post = function (m) { window.webkit.messageHandlers.tp.postMessage(m); };
-          window.TPN = {
-            request: function (id, m, j) { post({ t: 'req', id: id, m: m, j: j }); },
-            prefsGet: function () { return window.__TP_PREFS; },
-            prefsSet: function (s) { window.__TP_PREFS = s; post({ t: 'prefs', v: s }); },
-            stateGet: function () { return window.__TP_STATE; },
-            stateSet: function (s) { window.__TP_STATE = s; post({ t: 'state', v: s }); },
-            log: function (s) { post({ t: 'log', v: String(s) }); }
-          };
-        })();
-        """
-        conf.userContentController.addUserScript(WKUserScript(source: boot, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        installBoot(conf.userContentController)
         conf.userContentController.add(bridge, name: "tp")
 
         web = WKWebView(frame: view.bounds, configuration: conf)
@@ -142,9 +127,75 @@ final class MainViewController: UIViewController, WKNavigationDelegate {
         player.setRect(x: x, y: y, w: w, h: h, visible: visible)
     }
 
+    /// The script every page load starts with: the bridge, and the settings and state as they are NOW (not as they
+    /// were when the app started), so a reload after iOS ended the page, or after a restore, has the latest ones.
+    private func installBoot(_ uc: WKUserContentController) {
+        uc.removeAllUserScripts()
+        let boot = """
+        window.__TP_IOS = true;
+        window.__TP_PREFS = \(Bridge.json(bridge.prefsJSON));
+        window.__TP_STATE = \(Bridge.json(bridge.stateJSON));
+        (function () {
+          var post = function (m) { window.webkit.messageHandlers.tp.postMessage(m); };
+          window.TPN = {
+            request: function (id, m, j) { post({ t: 'req', id: id, m: m, j: j }); },
+            prefsGet: function () { return window.__TP_PREFS; },
+            prefsSet: function (s) { window.__TP_PREFS = s; post({ t: 'prefs', v: s }); },
+            stateGet: function () { return window.__TP_STATE; },
+            stateSet: function (s) { window.__TP_STATE = s; post({ t: 'state', v: s }); },
+            log: function (s) { post({ t: 'log', v: String(s) }); }
+          };
+        })();
+        """
+        uc.addUserScript(WKUserScript(source: boot, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
+
+    /// Loads the interface again with the current settings (after a restore, or when iOS ended the page).
+    func reloadPage() {
+        installBoot(web.configuration.userContentController)
+        web.reload()
+    }
+
+    // MARK: backup
+
+    /// Saves a backup file and opens the share sheet (Files, iCloud Drive, AirDrop, mail ...).
+    func shareBackup(_ json: Data) {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Topplayer-backup-" + f.string(from: Date()) + ".json")
+        do { try json.write(to: url) } catch { bridge.emit("backup.done", ["ok": false, "error": error.localizedDescription]); return }
+        let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        vc.popoverPresentationController?.sourceView = view
+        vc.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+        vc.completionWithItemsHandler = { [weak self] _, completed, _, err in
+            self?.bridge.emit("backup.done", ["ok": completed && err == nil, "cancelled": !completed && err == nil])
+        }
+        present(vc, animated: true)
+    }
+
+    /// Lets you pick a backup file to restore.
+    func pickBackup() {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json, .data, .text])
+        picker.delegate = self
+        picker.allowsMultipleSelection = false
+        present(picker, animated: true)
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else { bridge.emit("backup.restored", ["ok": false, "error": "Bestand niet te lezen"]); return }
+        bridge.restoreBackup(data) { [weak self] ok, err in
+            if ok { self?.reloadPage() } else { self?.bridge.emit("backup.restored", ["ok": false, "error": err ?? "?"]) }
+        }
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
+
     /// iOS can end the web page's process while the app sits in the background; load it again instead of a blank
     /// screen (the playlists come from the database, nothing is downloaded again).
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        webView.reload()
+        reloadPage()
     }
 }

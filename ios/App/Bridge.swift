@@ -94,7 +94,12 @@ final class Bridge: NSObject, WKScriptMessageHandler {
 
     private func dispatch(_ id: Int, _ method: String, _ a: [String: Any], write: Bool = false) {
         var ok = true
-        var res: String
+        var res = "null"
+        let started = Date()
+        defer {
+            let took = Date().timeIntervalSince(started)
+            if took > 2.5 || !ok { AppLog.add((ok ? "" : "fout: ") + method + String(format: " · duurde %.1f s", took) + (ok ? "" : " · " + res)) }
+        }
         do {
             res = Bridge.json(write ? try handleWrite(method, a) : try handle(method, a))
         } catch {
@@ -115,6 +120,11 @@ final class Bridge: NSObject, WKScriptMessageHandler {
     }
 
     func emit(_ name: String, _ data: [String: Any]) {
+        if name == "import.done" || name == "epg.done" {
+            let who = name == "epg.done" ? "tv gids" : "playlist \((data["pid"] as? NSNumber)?.int64Value ?? (data["pid"] as? Int64 ?? 0))"
+            if (data["ok"] as? Bool) == false { AppLog.add(who + " mislukt: " + (data["error"] as? String ?? "?")) }
+            if let e = data["api_error"] as? String { AppLog.add(who + ": Xtream API mislukt (" + e + "), m3u gebruikt") }
+        }
         let n = Bridge.json(name)
         eval("window.TP&&TP.event(\(n),\(Bridge.json(data)))")
     }
@@ -136,10 +146,23 @@ final class Bridge: NSObject, WKScriptMessageHandler {
     }
 
     private func refreshAsync(_ id: Int64, epgAfter: Bool) {
+        // until it really starts (the guide may still be loading) the page says it is waiting
+        emit("import.progress", ["pid": id, "phase": epg.isRunning ? "queued-epg" : "queued"])
+        AppLog.add("playlist \(id) verversen: in de wachtrij" + (epg.isRunning ? " (tv gids laadt nog)" : ""))
         background { [self] in
+            let t0 = Date()
+            AppLog.add("playlist \(id) verversen: gestart")
             importer.refresh(id)
-            if epgAfter { epg.refresh() }
+            AppLog.add("playlist \(id) verversen: klaar na \(Int(Date().timeIntervalSince(t0))) s")
+            if epgAfter { epgNow() }
         }
+    }
+
+    private func epgNow() {
+        let t0 = Date()
+        AppLog.add("tv gids: gestart")
+        epg.refresh()
+        AppLog.add("tv gids: klaar na \(Int(Date().timeIntervalSince(t0))) s")
     }
 
     /// Imports run on their own queue and ask iOS for extra time, so switching apps halfway does not freeze them.
@@ -155,11 +178,50 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         }
     }
 
+    // MARK: backup
+
+    /// The PIN never leaves the device in a backup.
+    static func withoutSecrets(_ json: String) -> [String: Any] {
+        var o = ((try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]) ?? [:]
+        o["pin"] = nil
+        return o
+    }
+
+    /// Puts a backup back (same file as the TV app makes): content first, then the settings, keeping the PIN and the
+    /// settings lock that are set on this phone. New playlists are loaded afterwards.
+    func restoreBackup(_ data: Data, done: @escaping (Bool, String?) -> Void) {
+        writeQueue.async { [self] in
+            do {
+                guard let o = (try JSONSerialization.jsonObject(with: data)) as? [String: Any], (o["app"] as? String) == "Topplayer" else {
+                    throw DbError(message: "Dit is geen Topplayer back-up")
+                }
+                let added = try writeDb.importBackup(o)
+                if var restored = o["settings"] as? [String: Any] {
+                    let current = ((try? JSONSerialization.jsonObject(with: Data(prefsJSON.utf8))) as? [String: Any]) ?? [:]
+                    restored["pin"] = nil
+                    restored["lockSettings"] = nil
+                    for key in ["pin", "lockSettings"] { if let v = current[key] { restored[key] = v } }
+                    if let d = try? JSONSerialization.data(withJSONObject: restored), let str = String(data: d, encoding: .utf8) {
+                        defaults.set(str, forKey: "settings")
+                    }
+                }
+                AppLog.add("back-up teruggezet: \(added.count) playlist(s) erbij")
+                for id in added { refreshAsync(id, epgAfter: id == added.last) }
+                DispatchQueue.main.async { done(true, nil) }
+            } catch {
+                let msg = (error as? DbError)?.message ?? error.localizedDescription
+                AppLog.add("back-up terugzetten mislukt: " + msg)
+                DispatchQueue.main.async { done(false, msg) }
+            }
+        }
+    }
+
     // MARK: dispatcher
 
     private func handle(_ m: String, _ a: [String: Any]) throws -> Any? {
         switch m {
         // app
+        case "app.log": return AppLog.all()
         case "app.info":
             let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
             var o: [String: Any] = ["version": v, "sdk": 0, "device": UIDevice.current.model + " (iOS " + UIDevice.current.systemVersion + ")", "ip": ""]
@@ -241,10 +303,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
                 }
             }
             let last = db.kvGet("epg_updated").flatMap { Int64($0) }
-            if n > 0 || last == nil || now - last! > 12 * 3_600_000 { background { self.epg.refresh() } }
+            if n > 0 || last == nil || now - last! > 12 * 3_600_000 { background { self.epgNow() } }
             return n
         case "epg.refresh":
-            background { self.epg.refresh() }
+            background { self.epgNow() }
             return nil
         case "epg.status":
             // counting the whole guide is slow: the importer keeps the number
@@ -372,6 +434,17 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         case "img.prefetch": return nil
         case "server.start": return ["port": 0, "ip": "", "token": ""]
         case "server.stop": return nil
+        case "backup.share":
+            var o = try db.exportBackup()
+            o["settings"] = Bridge.withoutSecrets(prefsJSON)
+            o["app"] = "Topplayer"
+            o["version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+            let data = try JSONSerialization.data(withJSONObject: o, options: [.prettyPrinted])
+            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.shareBackup(data) }
+            return nil
+        case "backup.pick":
+            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.pickBackup() }
+            return nil
         case "backup.export":
             var o = try db.exportBackup()
             o["settings"] = (try? JSONSerialization.jsonObject(with: Data(prefsJSON.utf8))) ?? [String: Any]()

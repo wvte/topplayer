@@ -455,6 +455,44 @@ public final class Db {
 
     // MARK: backup
 
+    /// Column names go straight into SQL, so only known columns are accepted from a backup file.
+    private static let backupColumns: [String: Set<String>] = [
+        "fav": ["kind", "k", "title", "logo", "added", "ord"],
+        "progress": ["k", "kind", "title", "sub", "logo", "series_k", "season", "ep", "pos", "dur", "updated", "done", "hidden"],
+        "recent": ["k", "title", "logo", "at"],
+        "grp_pref": ["kind", "name", "hidden", "locked", "ord"],
+    ]
+
+    /// Puts a backup (same format as the TV app) back: favourites, progress, recents, group settings, and the playlists
+    /// that are not here yet. Returns the ids of the playlists it added (they still have to be loaded).
+    @discardableResult
+    public func importBackup(_ o: [String: Any]) throws -> [Int64] {
+        var added: [Int64] = []
+        try conn.transaction { () throws -> Void in
+            for (table, allowed) in Db.backupColumns {
+                guard let rows = o[table] as? [[String: Any]] else { continue }
+                for r in rows {
+                    let cols = r.keys.filter { allowed.contains($0) }.sorted()
+                    if cols.isEmpty { continue }
+                    let vals: [Any?] = cols.map { k -> Any? in
+                        let v = r[k]
+                        if v is NSNull { return nil }
+                        if let n = v as? NSNumber { return n.int64Value }
+                        return v.map { "\($0)" }
+                    }
+                    _ = try conn.run("INSERT OR REPLACE INTO \(table)(" + cols.joined(separator: ",") + ") VALUES(" + cols.map { _ in "?" }.joined(separator: ",") + ")", vals)
+                }
+            }
+            for p in (o["playlists"] as? [[String: Any]]) ?? [] {
+                let url = (p["url"] as? String ?? "").trimmed
+                if url.isEmpty || conn.scalar("SELECT COUNT(*) FROM playlists WHERE url=?", [url]) > 0 { continue }
+                added.append(try addPlaylist(name: p["name"] as? String ?? "Playlist", url: url, ua: p["ua"] as? String ?? "",
+                                             epgUrl: p["epg_url"] as? String ?? "", autoHours: (p["auto_hours"] as? NSNumber)?.intValue ?? 24))
+            }
+        }
+        return added
+    }
+
     public func exportBackup() throws -> Row {
         [
             "playlists": try conn.query("SELECT name,url,ua,epg_url,auto_hours,enabled FROM playlists ORDER BY sort,id"),
