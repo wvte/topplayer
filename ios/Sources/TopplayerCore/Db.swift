@@ -73,6 +73,24 @@ public final class Db {
         ("episode_series", "episode(series_id, season, ep)"), ("episode_k", "episode(k)"), ("episode_pid", "episode(pid)"),
     ]
 
+    /// An empty copy of a table, NAME_stage, with the same columns (INTEGER PRIMARY KEY included) and no indexes. An
+    /// import fills it in small steps and swaps it in at the end; a copy left by an import that was cut off is replaced.
+    func createStage(_ c: Connection, _ table: String) throws {
+        guard let ddl = try c.one("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", [table])?["sql"] as? String else {
+            throw DbError(message: "table \(table) missing")
+        }
+        guard let r = ddl.range(of: "^CREATE TABLE\\s+[\"`]?" + table + "[\"`]?\\s*\\(", options: [.regularExpression, .caseInsensitive]) else {
+            throw DbError(message: "cannot copy table \(table)")
+        }
+        try c.exec("DROP TABLE IF EXISTS \(table)_stage")
+        try c.exec(ddl.replacingCharacters(in: r, with: "CREATE TABLE \(table)_stage("))
+    }
+
+    /// The columns of a table as a comma list, without "id" when asked (so the rows get new ids).
+    func columnList(_ c: Connection, _ table: String, withoutId: Bool) throws -> String {
+        try c.query("PRAGMA table_info(\(table))").compactMap { $0["name"] as? String }.filter { !(withoutId && $0 == "id") }.joined(separator: ",")
+    }
+
     func dropContentIndexes(_ c: Connection) throws { for ix in Db.contentIndexes { try c.exec("DROP INDEX IF EXISTS \(ix.0)") } }
     func createContentIndexes(_ c: Connection) throws { for ix in Db.contentIndexes { try c.exec("CREATE INDEX IF NOT EXISTS \(ix.0) ON \(ix.1)") } }
 

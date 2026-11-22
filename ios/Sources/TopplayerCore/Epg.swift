@@ -66,17 +66,42 @@ public final class EpgImporter {
                 }
                 if files.isEmpty { throw DbError(message: "EPG download failed") }
                 let c = try Connection(path: dbPath)
+                c.setBusyTimeout(ms: 60_000)
                 var total = 0
-                try c.transaction {
-                    try c.run("DELETE FROM epg")
-                    let ins = try c.prepare("INSERT INTO epg(chan,start,stop,title,descr) VALUES(?,?,?,?,?)")
+                // The new guide is built in a copy (epg_stage), committed every few thousand programmes, while the old one
+                // stays in use; then one short step swaps the tables. Other writes never wait for the whole guide.
+                try c.transaction { () throws -> Void in try db.createStage(c, "epg") }
+                do {
+                    try c.exec("BEGIN IMMEDIATE")
+                    let ins = try c.prepare("INSERT INTO epg_stage(chan,start,stop,title,descr) VALUES(?,?,?,?,?)")
+                    var pending = 0
+                    let step: () -> Void = {
+                        pending += 1
+                        if pending < 3000 { return }
+                        pending = 0
+                        _ = try? c.exec("COMMIT")
+                        _ = try? c.exec("BEGIN IMMEDIATE")
+                    }
                     for f in files {
                         emit("epg.progress", ["phase": "parse"])
-                        let parser = XmlTv(ourKeys: ourKeys, nameMap: nameMap, from: from, to: to, insert: ins)
+                        let parser = XmlTv(ourKeys: ourKeys, nameMap: nameMap, from: from, to: to, insert: ins, afterInsert: step)
                         total += parser.run(file: f)
                         try? FileManager.default.removeItem(at: f)
                     }
+                    try c.exec("COMMIT")
+                    // the swap: the old guide goes, the new one takes its name and gets its indexes back
+                    let indexes = try c.query("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='epg' AND sql IS NOT NULL").compactMap { $0["sql"] as? String }
+                    try c.transaction { () throws -> Void in
+                        try c.exec("DROP TABLE epg")
+                        try c.exec("ALTER TABLE epg_stage RENAME TO epg")
+                        for ix in indexes { try c.exec(ix) }
+                    }
+                } catch {
+                    _ = try? c.exec("ROLLBACK")
+                    _ = try? c.exec("DROP TABLE IF EXISTS epg_stage")
+                    throw error
                 }
+                _ = try? c.exec("PRAGMA wal_checkpoint(TRUNCATE)")
                 db.kvSet("epg_updated", String(Db.nowMs()))
                 db.kvSet("epg_count", String(total)) // the settings page shows it without counting the guide
                 done = ["ok": true, "programmes": total]
@@ -123,6 +148,7 @@ final class XmlTv: NSObject, XMLParserDelegate {
     let nameMap: [String: String]
     let from: Int64, to: Int64
     let insert: Connection.Statement
+    let afterInsert: () -> Void
     var idMap: [String: String] = [:]
     var curChannel: String?
     var progChan: String?
@@ -134,12 +160,13 @@ final class XmlTv: NSObject, XMLParserDelegate {
     var inDisplayName = false
     var count = 0
 
-    init(ourKeys: Set<String>, nameMap: [String: String], from: Int64, to: Int64, insert: Connection.Statement) {
+    init(ourKeys: Set<String>, nameMap: [String: String], from: Int64, to: Int64, insert: Connection.Statement, afterInsert: @escaping () -> Void = {}) {
         self.ourKeys = ourKeys
         self.nameMap = nameMap
         self.from = from
         self.to = to
         self.insert = insert
+        self.afterInsert = afterInsert
     }
 
     func run(file: URL) -> Int {
@@ -208,6 +235,7 @@ final class XmlTv: NSObject, XMLParserDelegate {
                 let d = desc?.trimmed
                 _ = try? insert.insert([ch, pStart, pStop, (title ?? "").trimmed, d])
                 count += 1
+                afterInsert()
                 progChan = nil
             }
         default: break

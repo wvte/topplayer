@@ -300,6 +300,29 @@ final class DbTests: XCTestCase {
         imp.refresh(pid)
         XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM live"), 2)
         XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM episode"), 4)
+        // the list is built in copies that are swapped in: none may be left, and every episode points at its series
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE '%_stage'"), 0)
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM episode e LEFT JOIN series s ON s.id=e.series_id WHERE s.id IS NULL"), 0)
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM series"), 2)
+        XCTAssertEqual(try db.series("S|suits")?["n_eps"] as? Int64, 3)
+        // all content indexes are back after the swap
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('live_k','episode_series','series_k')"), 3)
+    }
+
+    func testImportLeavesOtherPlaylistsAndOldCopiesAlone() throws {
+        let pid = try importFile(sample)
+        // a copy left behind by an import that was cut off is simply replaced
+        try db.conn.exec("CREATE TABLE live_stage(x)")
+        let other = try db.addPlaylist(name: "B", url: "http://b/get.php", ua: "", epgUrl: "", autoHours: 0)
+        try db.conn.run("INSERT INTO live(pid,k,name,sname,grp,url,ord) VALUES(?,?,?,?,?,?,?)", [other, "L|b", "B1", "b1", "g", "u", 0])
+        var events: [(String, [String: Any])] = []
+        let imp = Importer(db: db, dbPath: path, cacheDir: dir) { events.append(($0, $1)) }
+        imp.demoFile = dir.appendingPathComponent("list.m3u")
+        imp.refresh(pid)
+        XCTAssertEqual(events.last?.1["ok"] as? Bool, true, "\(String(describing: events.last))")
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM live WHERE pid=?", [other]), 1)
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM live WHERE pid=?", [pid]), 2)
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE '%_stage'"), 0)
     }
 
     func testEmptyPlaylistFailsAndKeepsOldData() throws {
@@ -312,6 +335,7 @@ final class DbTests: XCTestCase {
         imp.refresh(pid)
         XCTAssertEqual(events.last?.1["ok"] as? Bool, false)
         XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM live"), 2)
+        XCTAssertEqual(db.conn.scalar("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE '%_stage'"), 0)
     }
 
     func testFavouritesProgressAndContinue() throws {

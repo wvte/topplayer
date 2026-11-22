@@ -121,12 +121,15 @@ public final class Importer {
         let pid: Int64
         let live, movie, series, ep: Connection.Statement
 
-        init(pid: Int64, _ c: Connection) throws {
+        private var nextSeriesId: Int64
+
+        init(pid: Int64, _ c: Connection, firstSeriesId: Int64) throws {
             self.pid = pid
-            live = try c.prepare("INSERT INTO live(pid,k,num,name,sname,logo,grp,url,epg,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-            movie = try c.prepare("INSERT INTO movie(pid,k,name,sname,year,logo,grp,url,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
-            series = try c.prepare("INSERT INTO series(pid,k,name,sname,logo,grp,ord,xt_id) VALUES(?,?,?,?,?,?,?,?)")
-            ep = try c.prepare("INSERT INTO episode(pid,series_id,k,season,ep,name,url,logo,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+            nextSeriesId = firstSeriesId
+            live = try c.prepare("INSERT INTO live_stage(pid,k,num,name,sname,logo,grp,url,epg,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+            movie = try c.prepare("INSERT INTO movie_stage(pid,k,name,sname,year,logo,grp,url,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+            series = try c.prepare("INSERT INTO series_stage(id,pid,k,name,sname,logo,grp,ord,xt_id) VALUES(?,?,?,?,?,?,?,?,?)")
+            ep = try c.prepare("INSERT INTO episode_stage(pid,series_id,k,season,ep,name,url,logo,ua,ref,ord) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
         }
 
         private func opt(_ s: String?) -> String? { (s ?? "").isEmpty ? nil : s }
@@ -138,7 +141,9 @@ public final class Importer {
             _ = try? movie.insert([pid, r.key, r.name, r.sname, r.year, r.logo, r.grp, r.url, opt(r.ua), opt(r.ref), r.ord])
         }
         func insertSeries(_ r: ImportRow) -> Int64 {
-            (try? series.insert([pid, r.seriesKey, r.seriesName, r.seriesNorm ?? "", r.logo, r.grp, r.ord, r.xtId])) ?? 0
+            let id = nextSeriesId
+            nextSeriesId += 1
+            return (try? series.insert([id, pid, r.seriesKey, r.seriesName, r.seriesNorm ?? "", r.logo, r.grp, r.ord, r.xtId])) != nil ? id : 0
         }
         func insertEpisode(_ r: ImportRow, seriesId: Int64, key: String, episode: Int, title: String) {
             _ = try? ep.insert([pid, seriesId, key, r.season, episode, title, r.url, r.logo, opt(r.ua), opt(r.ref), r.ord])
@@ -147,43 +152,89 @@ public final class Importer {
 
     struct Result { var counts: [Int]; var parseMs: Int; var indexMs: Int }
 
+    static let contentTables = ["live", "movie", "series", "episode", "grp"]
+    /// Rows per small transaction while the new list is built: other writes wait at most for one such step.
+    static let chunk = 3000
+
     /// feeder reads the rows and calls sink for each; sink returns false to stop. pct reports the progress in percent.
+    ///
+    /// The new list is built next to the one in use and swapped in at the end:
+    /// 1. rows go into empty copies of the tables (live_stage ...), committed every few thousand rows, so the lists on
+    ///    screen keep working and other writes (where you are in a film, favourites) only wait for one small step;
+    /// 2. one short transaction swaps the rows of this playlist (delete old, copy new, rebuild indexes). If anything
+    ///    fails before that, the old list simply stays.
     private func importInto(pid: Int64, source: String,
                             feeder: (ImportCore, UnsafeMutablePointer<String>, (ImportRow) -> Bool, (Int) -> Void) throws -> Void) throws -> Result {
         let c = try Connection(path: dbPath)
+        c.setBusyTimeout(ms: 60_000)
         let parseStart = Date()
         var counts = [0, 0, 0, 0]
         var parseMs = 0, indexMs = 0
         var headerEpg = ""
-        try c.transaction {
-            // Without the indexes the inserts are about 3x faster; they are built again at the end, in the same transaction.
-            try db.dropContentIndexes(c)
-            for t in ["live", "movie", "series", "episode", "grp"] { try c.run("DELETE FROM \(t) WHERE pid=?", [pid]) }
-            let core = ImportCore()
-            let store = try Store(pid: pid, c)
-            var lastPct = 0
-            try withUnsafeMutablePointer(to: &headerEpg) { hp in
-                try feeder(core, hp, { row in
-                    core.consume(row, store)
-                    if row.ord % 2500 == 0 && row.ord > 0 { self.progress(pid, "parse", Int64(row.ord), 0, percent: lastPct) }
-                    return true
-                }, { lastPct = $0 })
+        let tables = Importer.contentTables
+        try c.transaction { () throws -> Void in for t in tables { try db.createStage(c, t) } }
+        // series get their final id now (above every id in use), so the episodes keep pointing at the right series
+        let firstSeriesId = c.scalar("SELECT COALESCE(MAX(id),0)+1 FROM series")
+        do {
+            try c.exec("BEGIN IMMEDIATE")
+            var inTx = true
+            do {
+                let core = ImportCore()
+                let store = try Store(pid: pid, c, firstSeriesId: firstSeriesId)
+                var lastPct = 0
+                var pending = 0
+                try withUnsafeMutablePointer(to: &headerEpg) { hp in
+                    try feeder(core, hp, { row in
+                        core.consume(row, store)
+                        if row.ord % 2500 == 0 && row.ord > 0 { self.progress(pid, "parse", Int64(row.ord), 0, percent: lastPct) }
+                        pending += 1
+                        if pending >= Importer.chunk {
+                            // a small step is done: commit it, so a waiting write can go in between
+                            pending = 0
+                            _ = try? c.exec("COMMIT")
+                            _ = try? c.exec("BEGIN IMMEDIATE")
+                        }
+                        return true
+                    }, { lastPct = $0 })
+                }
+                counts = core.counts
+                for (id, n) in core.seriesEpisodes {
+                    try c.run("UPDATE series_stage SET n_eps=?, n_seasons=?, logo=CASE WHEN logo='' THEN ? ELSE logo END WHERE id=?",
+                              [n, core.seriesSeasons[id]?.count ?? 0, core.seriesLogo[id] ?? "", id])
+                }
+                for g in core.groups { try c.run("INSERT INTO grp_stage(pid,kind,name,ord,n) VALUES(?,?,?,?,?)", [pid, g.kind, g.name, g.firstOrd, g.count]) }
+                try c.exec("COMMIT")
+                inTx = false
+            } catch {
+                if inTx { _ = try? c.exec("ROLLBACK") }
+                throw error
             }
-            counts = core.counts
-            for (id, n) in core.seriesEpisodes {
-                try c.run("UPDATE series SET n_eps=?, n_seasons=?, logo=CASE WHEN logo='' THEN ? ELSE logo END WHERE id=?",
-                          [n, core.seriesSeasons[id]?.count ?? 0, core.seriesLogo[id] ?? "", id])
-            }
-            for g in core.groups { try c.run("INSERT INTO grp(pid,kind,name,ord,n) VALUES(?,?,?,?,?)", [pid, g.kind, g.name, g.firstOrd, g.count]) }
-            try c.run("UPDATE playlists SET n_live=?, n_movie=?, n_series=?, last_refresh=?, header_epg=?, status='ok', source=? WHERE id=?",
-                      [counts[0], counts[1], counts[2], Db.nowMs(), headerEpg, source, pid])
             if counts.reduce(0, +) == 0 { throw DbError(message: "No channels found in playlist") }
+
+            // the swap: short, and all or nothing
             let indexStart = Date()
             progress(pid, "index", 0, 0)
-            try db.createContentIndexes(c)
+            try c.transaction { () throws -> Void in
+                try db.dropContentIndexes(c)
+                for t in tables { try c.run("DELETE FROM \(t) WHERE pid=?", [pid]) }
+                for t in tables {
+                    // new ids for everything except series, whose ids the episodes already use
+                    let cols = try db.columnList(c, t, withoutId: t != "series")
+                    try c.exec("INSERT INTO \(t)(\(cols)) SELECT \(cols) FROM \(t)_stage")
+                }
+                try c.run("UPDATE playlists SET n_live=?, n_movie=?, n_series=?, last_refresh=?, header_epg=?, status='ok', source=? WHERE id=?",
+                          [counts[0], counts[1], counts[2], Db.nowMs(), headerEpg, source, pid])
+                try db.createContentIndexes(c)
+                for t in tables { try c.exec("DROP TABLE IF EXISTS \(t)_stage") }
+            }
             parseMs = Int(indexStart.timeIntervalSince(parseStart) * 1000)
             indexMs = Int(Date().timeIntervalSince(indexStart) * 1000)
+        } catch {
+            // the list in use was not touched; throw the half built copy away
+            for t in tables { _ = try? c.exec("DROP TABLE IF EXISTS \(t)_stage") }
+            throw error
         }
+        _ = try? c.exec("PRAGMA wal_checkpoint(TRUNCATE)")
         return Result(counts: counts, parseMs: parseMs, indexMs: indexMs)
     }
 }
