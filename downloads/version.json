@@ -1,8 +1,8 @@
 {
-  "code": 20,
-  "name": "1.0.19",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.19.apk",
-  "sha256": "4a1d337c764dcf9185e9f2809bf6fdb3ae2218e09cff6ffd4f56c3e335b0c047",
-  "size": 2504826,
-  "notes": "Afsluiten werkt, instellingen en series blijven werken tijdens verversen, en een logboek in Instellingen, Over."
+  "code": 21,
+  "name": "1.0.20",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.20.apk",
+  "sha256": "f0e03aa7ac1ed7eae774fc3fab69cd6d27d89e40119665412afd9fcde7349f23",
+  "size": 2508922,
+  "notes": "Grote reparatie: de app loopt niet meer vast na een film en verversen. Afsluiten sluit echt af, geen zwart scherm meer bij opstarten."
 }
