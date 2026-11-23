@@ -1,8 +1,8 @@
 {
-  "code": 21,
-  "name": "1.0.20",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.20.apk",
-  "sha256": "f0e03aa7ac1ed7eae774fc3fab69cd6d27d89e40119665412afd9fcde7349f23",
+  "code": 22,
+  "name": "1.0.21",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.21.apk",
+  "sha256": "66676a6e7760ffd6b53010dad2d1715562a636c50be032193b949d9e0440b80b",
   "size": 2508922,
-  "notes": "Grote reparatie: de app loopt niet meer vast na een film en verversen. Afsluiten sluit echt af, geen zwart scherm meer bij opstarten."
+  "notes": "Rustiger ontwerp: rood alleen voor wat nu speelt, lichtere letters, geen gloed. Volgende aflevering ook 35, 40 of 50 seconden voor het einde."
 }
