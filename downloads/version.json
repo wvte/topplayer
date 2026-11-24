@@ -1,8 +1,8 @@
 {
-  "code": 22,
-  "name": "1.0.21",
-  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.21.apk",
-  "sha256": "66676a6e7760ffd6b53010dad2d1715562a636c50be032193b949d9e0440b80b",
-  "size": 2508922,
-  "notes": "Rustiger ontwerp: rood alleen voor wat nu speelt, lichtere letters, geen gloed. Volgende aflevering ook 35, 40 of 50 seconden voor het einde."
+  "code": 23,
+  "name": "1.0.22",
+  "url": "https://raw.githubusercontent.com/wvte/topplayer/claude/hopeful-hopper-3aqk5u/downloads/Topplayer-1.0.22.apk",
+  "sha256": "cd0d636a1a2776c98c89b0f0ad66fd80153ec8b088f53dd40a124bac4bce482b",
+  "size": 2423043,
+  "notes": "Nieuwe look: donkerbruin met amber, een warmer lettertype en nieuwe iconen. Ook een nieuw app icoon."
 }

@@ -21,7 +21,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate, UIDocume
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 1)
+        view.backgroundColor = UIColor(red: 0.110, green: 0.086, blue: 0.067, alpha: 1)
 
         let fm = FileManager.default
         let support = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)) ?? fm.temporaryDirectory
@@ -113,7 +113,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate, UIDocume
         }
         web.backgroundColor = color
         web.scrollView.backgroundColor = color
-        if hex.hasPrefix("#") { view.backgroundColor = color == .clear ? UIColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 1) : color }
+        if hex.hasPrefix("#") { view.backgroundColor = color == .clear ? UIColor(red: 0.110, green: 0.086, blue: 0.067, alpha: 1) : color }
     }
 
     func setVideoRect(x: Double, y: Double, w: Double, h: Double, visible: Bool) {
