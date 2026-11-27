@@ -173,6 +173,17 @@ final class NetTests: XCTestCase {
         XCTAssertEqual(n, 2)
     }
 
+    func testProbe() throws {
+        guard case let .answer(st, type, _) = try DirectHTTP.probe(base + "/plain", ua: "x") else { return XCTFail("no answer") }
+        XCTAssertEqual(st, 200)
+        XCTAssertNil(type)
+        guard case let .answer(st2, _, text) = try DirectHTTP.probe(base + "/blocked", ua: "x") else { return XCTFail("no answer") }
+        XCTAssertEqual(st2, 512)
+        XCTAssertEqual(text, "HTTP 512: Access denied IP not allowed")
+        guard case let .answer(st3, _, _) = try DirectHTTP.probe(base + "/redirect", ua: "x") else { return XCTFail("no answer") }
+        XCTAssertEqual(st3, 200)
+    }
+
     func testHostPort() {
         XCTAssertEqual(Net.hostPort("http://tv.example:8080/get.php?username=u&password=p"), "tv.example:8080")
         XCTAssertEqual(Net.hostPort("http://tv.example/get.php"), "tv.example:80")

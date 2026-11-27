@@ -1,4 +1,5 @@
 import AVFoundation
+import TopplayerCore
 #if os(macOS)
 import AppKit
 #else
@@ -43,6 +44,12 @@ final class PlayerEngine: NSObject {
     private var triedVLC = false
     private var failed = false
     private var vlcError: String?
+    /// how often this stream was refused and tried again (a server often still counts the stream before for a moment)
+    private var refusals = 0
+    /// Servers where Apple's player failed and VLC then played: their streams go to VLC straight away from then on.
+    private var vlcHosts: Set<String> = []
+    /// answers that mean "not now": too many connections, busy, blocked for a moment
+    private static let notNow: Set<Int> = [403, 429, 458, 509, 512]
     private static let startAV: TimeInterval = 12
     private static let startVLC: TimeInterval = 25
     private static let stall: TimeInterval = 45
@@ -75,7 +82,13 @@ final class PlayerEngine: NSObject {
     fileprivate func observe(_ n: String, _ d: [String: Any]) {
         guard n == "player.time", let pos = (d["pos"] as? NSNumber)?.int64Value ?? (d["pos"] as? Int64) else { return }
         // started = the clock moved forward (a resume position alone is not a picture)
-        if lastPos >= 0, pos > lastPos { started = true; lastProgress = Date() }
+        if lastPos >= 0, pos > lastPos {
+            if !started, active == .vlc, triedVLC, let h = Self.host(lastArgs), vlcHosts.insert(h).inserted {
+                AppLog.add("afspelen: \(h) speelt met VLC en niet met de Apple speler, VLC gaat daar voortaan eerst")
+            }
+            started = true
+            lastProgress = Date()
+        }
         lastPos = pos
     }
 
@@ -111,9 +124,22 @@ final class PlayerEngine: NSObject {
         let engine = active == .vlc ? "vlc" : "av"
         let urlString = args["url"] as? String ?? ""
         let ua = (args["ua"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "VLC/3.0.20 LibVLC/3.0.20"
-        Self.probe(urlString, ua: ua) { [weak self] status, type, netErr in
+        Self.probe(urlString, ua: ua) { [weak self] status, type, netErr, serverText in
             guard let self = self, !self.lastArgs.isEmpty, (self.lastArgs["url"] as? String) == urlString else { return }
             let u = URL(string: urlString)
+            // "not now" right at the start: wait a moment and try again, twice, before showing an error
+            if let st = status, !self.started, Self.notNow.contains(st) || st >= 500, self.refusals < 2 {
+                self.refusals += 1
+                let wait: Double = self.refusals == 1 ? 3 : 6
+                AppLog.add("afspelen: \(u?.host ?? "?") zegt HTTP \(st), over \(Int(wait)) s opnieuw (\(self.refusals)/2)")
+                self.av.stop(); self.vlc.stop(); self.show(.none)
+                self.emit("player.error", ["code": -1, "name": "", "msg": "De server is nog bezet, even wachten", "retry": true, "attempt": self.refusals])
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                    guard let self = self, (self.lastArgs["url"] as? String) == urlString else { return }
+                    self.begin(args)
+                }
+                return
+            }
             let ext = (u?.pathExtension ?? "").lowercased()
             let code: String
             var msg: String
@@ -138,23 +164,43 @@ final class PlayerEngine: NSObject {
             var info = detail.joined(separator: " + ")
             if !ext.isEmpty { info += " · ." + ext }
             if let st = status { info += " · HTTP \(st)" }
-            if let t = type, !t.isEmpty { info += " · " + t }
+            if let t = type, !t.isEmpty { info += " · " + (t.split(separator: ";").first.map(String.init) ?? t) }
+            if let st = status, let said = serverText, said.count > "HTTP \(st)".count {
+                info += " · \"" + String(said.dropFirst("HTTP \(st): ".count)) + "\""
+            }
+            AppLog.add("afspelen mislukt: \(code) · \(info)")
             if let h = u?.host { info += " · " + h }
             self.av.stop(); self.vlc.stop(); self.lastArgs = [:]; self.show(.none)
             self.emit("player.error", ["code": code, "name": code, "msg": msg, "info": info, "engine": engine, "fatal": true, "retry": false, "attempt": 0])
         }
     }
 
-    /// Asks the server for the first bytes: says whether it answers, with which status and type.
-    private static func probe(_ s: String, ua: String, done: @escaping (Int?, String?, Int?) -> Void) {
-        guard let u = URL(string: s), u.scheme?.hasPrefix("http") == true else { DispatchQueue.main.async { done(nil, nil, nil) }; return }
+    /// Asks the server for the first bytes: says whether it answers, with which status and type. Over our own socket
+    /// first, the way the players connect (not through iCloud Private Relay, which some providers refuse); through
+    /// URLSession for https or when the socket cannot connect.
+    private static func probe(_ s: String, ua: String, done: @escaping (Int?, String?, Int?, String?) -> Void) {
+        if s.lowercased().hasPrefix("http://") {
+            DispatchQueue.global(qos: .userInitiated).async {
+                if case let .answer(st, type, text)? = try? DirectHTTP.probe(s, ua: ua) {
+                    DispatchQueue.main.async { done(st, type, nil, text) }
+                } else {
+                    systemProbe(s, ua: ua, done: done)
+                }
+            }
+            return
+        }
+        systemProbe(s, ua: ua, done: done)
+    }
+
+    private static func systemProbe(_ s: String, ua: String, done: @escaping (Int?, String?, Int?, String?) -> Void) {
+        guard let u = URL(string: s), u.scheme?.hasPrefix("http") == true else { DispatchQueue.main.async { done(nil, nil, nil, nil) }; return }
         var r = URLRequest(url: u, timeoutInterval: 8)
         r.setValue("bytes=0-1023", forHTTPHeaderField: "Range")
         r.setValue(ua, forHTTPHeaderField: "User-Agent")
         URLSession.shared.dataTask(with: r) { _, resp, err in
             let h = resp as? HTTPURLResponse
             let ne = (err as NSError?).map { $0.code }
-            DispatchQueue.main.async { done(h?.statusCode, h?.value(forHTTPHeaderField: "Content-Type"), h == nil ? ne : nil) }
+            DispatchQueue.main.async { done(h?.statusCode, h?.value(forHTTPHeaderField: "Content-Type"), h == nil ? ne : nil, nil) }
         }.resume()
     }
 
@@ -210,7 +256,16 @@ final class PlayerEngine: NSObject {
 
     // MARK: control
 
+    private static func host(_ a: [String: Any]) -> String? {
+        URL(string: a["url"] as? String ?? "")?.host
+    }
+
     func play(_ a: [String: Any]) {
+        refusals = 0
+        begin(a)
+    }
+
+    private func begin(_ a: [String: Any]) {
         lastArgs = a
         triedVLC = false
         armWatchdog()
@@ -219,8 +274,9 @@ final class PlayerEngine: NSObject {
         try? AVAudioSession.sharedInstance().setActive(true)
         #endif
         // stop the other engine without telling the page that playback ended
-        let forced = a["engine"] as? String
+        var forced = a["engine"] as? String
         let live = a["live"] as? Bool ?? false
+        if forced == nil, let h = Self.host(a), vlcHosts.contains(h) { forced = "vlc" }
         if live, forced != "vlc", let hls = Self.hlsVariant(a["url"] as? String ?? "") {
             // the HLS form with Apple's player first; the address as listed goes to VLC if that does not work
             var b = a

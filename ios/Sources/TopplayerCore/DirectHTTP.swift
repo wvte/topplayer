@@ -100,6 +100,57 @@ public enum DirectHTTP {
         throw Failure(message: "Too many redirects")
     }
 
+    public enum ProbeOutcome {
+        /// what the server answered (status, content type, and for an error the start of its text)
+        case answer(status: Int, type: String?, text: String)
+        /// the address leads to https://, which the system checks
+        case https(String)
+    }
+
+    /// Asks for the first kilobyte of a stream over our own socket, straight from the home connection like the
+    /// players do: tells whether the server answers, and with what. Nothing more is downloaded.
+    public static func probe(_ address: String, ua: String, timeout: Double = 8) throws -> ProbeOutcome {
+        var current = address
+        for _ in 0..<6 {
+            guard let c = components(current), let host = c.host, !host.isEmpty else { throw Failure(message: "Bad address") }
+            let scheme = (c.scheme ?? "").lowercased()
+            if scheme == "https" { return .https(current) }
+            guard scheme == "http" else { throw Failure(message: "Not an http address") }
+            let port = c.port ?? 80
+            var path = c.percentEncodedPath
+            if path.isEmpty { path = "/" }
+            if let q = c.percentEncodedQuery { path += "?" + q }
+            let hostHeader = (host.contains(":") ? "[" + host + "]" : host) + (port == 80 ? "" : ":\(port)")
+            let fd = try open(host: host, port: port, connectTimeout: timeout, readTimeout: timeout)
+            defer { close(fd) }
+            let req = "GET \(path) HTTP/1.1\r\nHost: \(hostHeader)\r\nUser-Agent: \(ua)\r\nAccept: */*\r\nRange: bytes=0-1023\r\nConnection: close\r\n\r\n"
+            try sendAll(fd, Array(req.utf8))
+            let r = Reader(fd: fd)
+            var (status, headers) = try r.readHead()
+            while status == 100 { (status, headers) = try r.readHead() }
+            if [301, 302, 303, 307, 308].contains(status), let loc = headers["location"], !loc.isEmpty {
+                guard let next = URL(string: loc, relativeTo: URL(string: current))?.absoluteURL.absoluteString else {
+                    throw Failure(message: "Bad redirect")
+                }
+                current = next
+                continue
+            }
+            var text = ""
+            if status >= 400 {
+                let chunked = (headers["transfer-encoding"] ?? "").lowercased().contains("chunked")
+                let length = headers["content-length"].flatMap { Int64($0.trimmingCharacters(in: .whitespaces)) }
+                var head: [UInt8] = []
+                try? r.readBody(chunked: chunked, length: length) { part in
+                    if head.count < 1024 { head.append(contentsOf: part.prefix(1024 - head.count)) }
+                    if head.count >= 1024 { throw Failure(message: "enough") }
+                }
+                text = errorText(status, head)
+            }
+            return .answer(status: status, type: headers["content-type"], text: text)
+        }
+        throw Failure(message: "Too many redirects")
+    }
+
     /// "HTTP 512" plus the start of the text the server sent along (tags and extra spaces removed).
     public static func errorText(_ status: Int, _ body: [UInt8]) -> String {
         var s = String(decoding: body, as: UTF8.self)
