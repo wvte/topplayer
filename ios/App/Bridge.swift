@@ -37,6 +37,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         importer.demoFile = Bundle.main.url(forResource: "demo", withExtension: "m3u")
         epg = EpgImporter(db: db, dbPath: dbPath, cacheDir: cacheDir) { [weak self] n, d in self?.emit(n, d) }
         xtream = XtreamExtras(db: db)
+        Net.log = { AppLog.add($0) }
     }
 
     // MARK: preferences kept for the injected script
