@@ -1,3 +1,4 @@
+#if os(iOS)
 import AVKit
 import UIKit
 import UniformTypeIdentifiers
@@ -5,7 +6,7 @@ import WebKit
 import TopplayerCore
 
 /// One full screen web view (the UI) over a video view. The web view is see-through while video plays.
-final class MainViewController: UIViewController, WKNavigationDelegate, UIDocumentPickerDelegate {
+final class MainViewController: UIViewController, WKNavigationDelegate, UIDocumentPickerDelegate, AppHost {
     private var web: WKWebView!
     private var bridge: Bridge!
     private var player: PlayerEngine!
@@ -46,6 +47,7 @@ final class MainViewController: UIViewController, WKNavigationDelegate, UIDocume
         conf.mediaTypesRequiringUserActionForPlayback = []
         conf.setURLSchemeHandler(SchemeHandler(root: Bundle.main.resourceURL!.appendingPathComponent("ui")), forURLScheme: SchemeHandler.scheme)
         bridge = Bridge(web: nil, db: db, dbPath: dbPath, cacheDir: cache)
+        bridge.host = self
 
         installBoot(conf.userContentController)
         conf.userContentController.add(bridge, name: "tp")
@@ -105,6 +107,11 @@ final class MainViewController: UIViewController, WKNavigationDelegate, UIDocume
         for sub in picker.subviews { if let b = sub as? UIButton { b.sendActions(for: .touchUpInside) } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 8) { picker.removeFromSuperview() }
     }
+
+    /// iOS apps are never closed by the app itself, and the home gesture already leaves it.
+    func exitApp() {}
+    func moveToBackground() {}
+    func toggleFullScreen() {}
 
     func setBackground(hex: String) {
         var color = UIColor.clear
@@ -199,3 +206,4 @@ final class MainViewController: UIViewController, WKNavigationDelegate, UIDocume
         reloadPage()
     }
 }
+#endif

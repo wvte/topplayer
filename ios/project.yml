@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.topplayer
   deploymentTarget:
     iOS: "15.0"
+    macOS: "12.0"
   createIntermediateGroups: true
 packages:
   TopplayerCore:
@@ -44,3 +45,44 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
+  # The Mac app: the same bridge, players and interface (TV layout, keyboard and mouse), its own window and menus.
+  TopplayerMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes: ["Resources", "Assets.xcassets"]
+      - path: Mac
+      - path: App/Resources/ui
+        type: folder
+      - path: App/Resources/demo.m3u
+    dependencies:
+      - package: TopplayerCore
+    settings:
+      base:
+        PRODUCT_NAME: Topplayer
+        PRODUCT_BUNDLE_IDENTIFIER: com.topplayer.mac
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        MACOSX_DEPLOYMENT_TARGET: "12.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        COMBINE_HIDPI_IMAGES: YES
+    info:
+      path: Mac/Info.plist
+      properties:
+        CFBundleName: Topplayer
+        CFBundleDisplayName: Topplayer
+        LSApplicationCategoryType: public.app-category.entertainment
+        LSMinimumSystemVersion: "12.0"
+        NSHumanReadableCopyright: "Topplayer. Video: AVFoundation en VLCKit (LGPL 2.1)."
+        NSPrincipalClass: NSApplication
+        NSSupportsAutomaticGraphicsSwitching: true
+        NSLocalNetworkUsageDescription: "Topplayer speelt zenders en films af van de server uit je playlist, ook als die in je eigen netwerk staat."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true

@@ -58,3 +58,72 @@ jobs:
           gh release edit ios-latest --notes "$NOTES" --target "${GITHUB_SHA}"
           gh release upload ios-latest ios/Topplayer-iOS-unsigned.ipa --clobber
           gh release view ios-latest --json assets --jq '.assets[] | .name + " " + (.size|tostring)'
+  mac:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project and fetch VLC
+        shell: bash
+        working-directory: ios
+        run: |
+          brew install xcodegen > brew.log 2>&1 || { tail -20 brew.log; exit 1; }
+          xcodegen generate
+          pod install > pod.log 2>&1 || { tail -40 pod.log; exit 1; }
+          tail -3 pod.log
+      - name: Build the Mac app (Apple silicon and Intel)
+        shell: bash
+        working-directory: ios
+        run: |
+          xcodebuild -workspace Topplayer.xcworkspace -scheme TopplayerMac -configuration Release \
+            -destination 'generic/platform=macOS' -derivedDataPath build-mac ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" build > mac.log 2>&1 \
+            || { grep -E "error:" mac.log | sort -u | head -60; tail -15 mac.log; exit 1; }
+          APP=build-mac/Build/Products/Release/Topplayer.app
+          # one ad hoc signature over everything (Apple silicon runs nothing unsigned)
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP" && echo "signature ok"
+          lipo -archs "$APP/Contents/MacOS/Topplayer"
+          du -sh "$APP"
+      - name: Start the app once (it must open its window and stay up)
+        shell: bash
+        working-directory: ios
+        run: |
+          APP=build-mac/Build/Products/Release/Topplayer.app
+          "$APP/Contents/MacOS/Topplayer" > run.log 2>&1 &
+          PID=$!
+          sleep 12
+          if kill -0 $PID 2>/dev/null; then echo "still running after 12 s"; else echo "the app stopped:"; cat run.log | tail -40; exit 1; fi
+          screencapture -x ../mac-window.png & SC=$!
+          sleep 6; kill $SC 2>/dev/null || true
+          kill $PID || true
+          grep -i "error\|fatal" run.log | head -10 || true
+      - name: Keep a screenshot of the first start
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-window
+          path: mac-window.png
+          if-no-files-found: ignore
+      - name: Pack the .dmg (drag Topplayer to Applications)
+        shell: bash
+        working-directory: ios
+        run: |
+          rm -rf dmg && mkdir dmg
+          cp -R build-mac/Build/Products/Release/Topplayer.app dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname Topplayer -srcfolder dmg -ov -format UDZO Topplayer-Mac.dmg > hdiutil.log 2>&1 || { cat hdiutil.log; exit 1; }
+          hdiutil verify Topplayer-Mac.dmg > /dev/null && echo "dmg ok"
+          ls -la Topplayer-Mac.dmg
+      - name: Publish the .dmg as a release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SUM=$(shasum -a 256 ios/Topplayer-Mac.dmg | cut -d' ' -f1)
+          NOTES="Mac app (Apple silicon and Intel, macOS 12 or newer), from commit ${GITHUB_SHA::7}. Not notarised: the first time open it via System Settings, Privacy and Security, Open Anyway. SHA256: $SUM"
+          gh release view mac-latest > /dev/null 2>&1 || gh release create mac-latest --prerelease --target "${GITHUB_SHA}" --title "Mac (laatste build)" --notes "$NOTES"
+          gh release edit mac-latest --notes "$NOTES" --target "${GITHUB_SHA}"
+          gh release upload mac-latest ios/Topplayer-Mac.dmg --clobber
+          gh release view mac-latest --json assets --jq '.assets[] | .name + " " + (.size|tostring)'

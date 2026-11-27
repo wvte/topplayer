@@ -1,10 +1,15 @@
+#if os(macOS)
+import AppKit
+import VLCKit
+#else
 import MobileVLCKit
 import UIKit
+#endif
 
 /// Playback with VLC for everything Apple's player cannot open: mkv, avi, raw MPEG-TS streams and so on.
 /// Speaks the same events as the other engines (player.state, player.time, ...).
 final class VLCEngine: NSObject, VLCMediaPlayerDelegate {
-    let view = UIView()
+    let view = PlatformView()
     private let emit: (String, [String: Any]) -> Void
     private var mp: VLCMediaPlayer?
     private var timer: Timer?
@@ -29,7 +34,12 @@ final class VLCEngine: NSObject, VLCMediaPlayerDelegate {
     init(emit: @escaping (String, [String: Any]) -> Void) {
         self.emit = emit
         super.init()
+        #if os(macOS)
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.black.cgColor
+        #else
         view.backgroundColor = .black
+        #endif
     }
 
     // MARK: control
@@ -115,7 +125,11 @@ final class VLCEngine: NSObject, VLCMediaPlayerDelegate {
         switch mode {
         case "fill", "zoom":
             if size.width > 0, size.height > 0 {
+                #if os(macOS)
+                let sc = view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+                #else
                 let sc = UIScreen.main.scale
+                #endif
                 let f = max(view.bounds.width * sc / size.width, view.bounds.height * sc / size.height)
                 p.scaleFactor = Float(f) * (mode == "zoom" ? zoom : 1)
             }

@@ -1,3 +1,4 @@
+#if os(iOS)
 import UIKit
 
 /// Small taps under the finger, like the system apps.
@@ -14,3 +15,4 @@ enum Haptics {
         UIImpactFeedbackGenerator(style: s).impactOccurred()
     }
 }
+#endif

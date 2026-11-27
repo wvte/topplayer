@@ -1,6 +1,18 @@
 # Topplayer
 
-Android TV APK downloads.
+Android TV APK, iPhone en Mac downloads.
+
+**Mac (.dmg, nieuwste build, Apple silicon en Intel, macOS 12 of nieuwer):**
+
+https://github.com/wvte/topplayer/releases/download/mac-latest/Topplayer-Mac.dmg
+
+Eerste keer openen: sleep Topplayer naar Programma's, open hem, klik op Gereed, ga naar Systeeminstellingen > Privacy en beveiliging en kies "Open toch". Daarna opent hij gewoon.
+
+**iPhone (.ipa, niet getekend):**
+
+https://github.com/wvte/topplayer/releases/download/ios-latest/Topplayer-iOS-unsigned.ipa
+
+**Android TV:**
 
 **Directe download (altijd de nieuwste versie):**
 

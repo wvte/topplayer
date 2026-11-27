@@ -1,8 +1,13 @@
-platform :ios, '15.0'
 project 'Topplayer.xcodeproj'
+use_frameworks!
 
+# VLC plays what Apple's player cannot: mkv, avi, raw MPEG-TS streams
 target 'Topplayer' do
-  use_frameworks!
-  # VLC plays what Apple's player cannot: mkv, avi, raw MPEG-TS streams
+  platform :ios, '15.0'
   pod 'MobileVLCKit', '~> 3.6'
+end
+
+target 'TopplayerMac' do
+  platform :osx, '12.0'
+  pod 'VLCKit', '~> 3.6'
 end

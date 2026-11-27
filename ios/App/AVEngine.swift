@@ -1,5 +1,32 @@
 import AVFoundation
 import AVKit
+#if os(macOS)
+import AppKit
+
+/// A view that shows an AVPlayerLayer (sits behind the transparent web view, like the video surface on Android).
+final class PlayerView: NSView {
+    let playerLayer = AVPlayerLayer()
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer = CALayer()
+        layer?.backgroundColor = NSColor.black.cgColor
+        playerLayer.frame = bounds
+        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        layer?.addSublayer(playerLayer)
+    }
+    convenience init() { self.init(frame: .zero) }
+    required init?(coder: NSCoder) { fatalError("not used") }
+    /// The picture follows the view at once (no implicit layer animation when the window or the preview resizes).
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        playerLayer.frame = bounds
+        CATransaction.commit()
+    }
+}
+#else
 import UIKit
 
 /// A view whose layer is an AVPlayerLayer (sits behind the transparent web view, like the video surface on Android).
@@ -7,6 +34,7 @@ final class PlayerView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
+#endif
 
 /// Playback with Apple's AVPlayer: HLS (.m3u8), mp4 and mov, with picture in picture and AirPlay.
 /// Anything it cannot open is handed to `fallback` (the VLC engine).
@@ -38,7 +66,9 @@ final class AVEngine: NSObject, AVPictureInPictureControllerDelegate {
     init(emit: @escaping (String, [String: Any]) -> Void) {
         self.emit = emit
         super.init()
+        #if os(iOS)
         view.backgroundColor = .black
+        #endif
         view.playerLayer.videoGravity = .resizeAspect
     }
 
@@ -53,8 +83,10 @@ final class AVEngine: NSObject, AVPictureInPictureControllerDelegate {
         retries = 0
         configure(a)
         setAspect(a["aspect"] as? String ?? aspect, zoom: 1)
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
         load(url)
     }
 
@@ -76,7 +108,9 @@ final class AVEngine: NSObject, AVPictureInPictureControllerDelegate {
             if AVPictureInPictureController.isPictureInPictureSupported() {
                 pip = AVPictureInPictureController(playerLayer: view.playerLayer)
                 pip?.delegate = self
+                #if os(iOS)
                 if #available(iOS 14.2, *) { pip?.canStartPictureInPictureAutomaticallyFromInline = true }
+                #endif
             }
             playerObs.append(player!.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in self?.emitState() })
         }

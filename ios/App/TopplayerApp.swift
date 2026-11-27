@@ -1,3 +1,4 @@
+#if os(iOS)
 import UIKit
 
 /// Which orientations the app may use right now: upright for browsing on a phone, landscape for video.
@@ -19,3 +20,4 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask { OrientationControl.mask }
 }
+#endif

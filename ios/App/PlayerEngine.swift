@@ -1,10 +1,14 @@
 import AVFoundation
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
 /// Chooses the engine per stream: Apple's player for HLS, mp4 and mov (picture in picture, AirPlay), VLC for the rest
 /// (mkv, avi, raw MPEG-TS ...). If Apple's player fails on a stream, VLC takes over by itself.
 final class PlayerEngine: NSObject {
-    let view = UIView()
+    let view = PlatformView()
     private let av: AVEngine
     private let vlc: VLCEngine
     private enum Active { case none, av, vlc }
@@ -94,7 +98,7 @@ final class PlayerEngine: NSObject {
             } else if active == .vlc, waited > (live ? Self.startVLCLive : Self.startVLC) {
                 fail(reason: "START")
             }
-        } else if !live, !userPaused, UIApplication.shared.applicationState == .active, now.timeIntervalSince(lastProgress) > Self.stall {
+        } else if !live, !userPaused, PlayerEngine.appActive, now.timeIntervalSince(lastProgress) > Self.stall {
             fail(reason: "STALL")
         }
     }
@@ -162,11 +166,16 @@ final class PlayerEngine: NSObject {
         vlc = VLCEngine(emit: { r.send($0, $1) })
         super.init()
         relay.hub = self
+        #if os(macOS)
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.black.cgColor
+        #else
         view.backgroundColor = .black
+        #endif
         view.isHidden = true
         for v in [av.view, vlc.view] {
             v.frame = view.bounds
-            v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            v.followParentSize()
             v.isHidden = true
             view.addSubview(v)
         }
@@ -205,8 +214,10 @@ final class PlayerEngine: NSObject {
         lastArgs = a
         triedVLC = false
         armWatchdog()
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
         // stop the other engine without telling the page that playback ended
         let forced = a["engine"] as? String
         let live = a["live"] as? Bool ?? false
@@ -249,4 +260,13 @@ final class PlayerEngine: NSObject {
     func togglePictureInPicture() { if active == .av { av.togglePictureInPicture() } }
 
     func setRect(x: Double, y: Double, w: Double, h: Double, visible: Bool) { view.isHidden = active == .none }
+
+    /// The app is in front (a stall only counts then).
+    static var appActive: Bool {
+        #if os(macOS)
+        return true // a Mac keeps playing in the background, so a stall is a stall
+        #else
+        return UIApplication.shared.applicationState == .active
+        #endif
+    }
 }

@@ -1,5 +1,9 @@
 import Foundation
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 import WebKit
 import TopplayerCore
 
@@ -13,6 +17,8 @@ final class Bridge: NSObject, WKScriptMessageHandler {
     var epg: EpgImporter!
     var xtream: XtreamExtras!
     var player: PlayerEngine!
+    /// the screen around the page (iPhone view controller or Mac window)
+    weak var host: AppHost?
 
     private let work = DispatchQueue(label: "tp.bridge", qos: .userInitiated, attributes: .concurrent)
     private let importQueue = DispatchQueue(label: "tp.import", qos: .utility)
@@ -37,8 +43,12 @@ final class Bridge: NSObject, WKScriptMessageHandler {
 
     var prefsJSON: String {
         if let s = defaults.string(forKey: "settings") { return s }
-        // phones and tablets are smaller than a TV: start with a bigger interface
+        // phones and tablets are smaller than a TV: start with a bigger interface; a Mac window scales like the TV
+        #if os(macOS)
+        let scale = 1.0
+        #else
         let scale = UIDevice.current.userInterfaceIdiom == .pad ? 1.5 : 2.0
+        #endif
         return "{\"uiScale\":\(scale),\"startScreen\":\"last\"}"
     }
     var stateJSON: String { defaults.string(forKey: "state") ?? "{}" }
@@ -167,6 +177,9 @@ final class Bridge: NSObject, WKScriptMessageHandler {
 
     /// Imports run on their own queue and ask iOS for extra time, so switching apps halfway does not freeze them.
     private func background(_ work: @escaping () -> Void) {
+        #if os(macOS)
+        importQueue.async { work() } // a Mac does not suspend apps in the background
+        #else
         importQueue.async {
             var task = UIBackgroundTaskIdentifier.invalid
             task = UIApplication.shared.beginBackgroundTask(withName: "import") {
@@ -176,6 +189,40 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             work()
             if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
         }
+        #endif
+    }
+
+    /// Runs `done` on the main thread once every write asked for so far is in the database (before the Mac app quits).
+    func afterWrites(_ done: @escaping () -> Void) {
+        writeQueue.async { DispatchQueue.main.async(execute: done) }
+    }
+
+    // MARK: platform
+
+    #if os(macOS)
+    private var awake: NSObjectProtocol?
+    /// The Mac's model name, like "MacBookAir10,1".
+    static func macModel() -> String {
+        var size = 0
+        sysctlbyname("hw.model", nil, &size, nil, 0)
+        var buf = [CChar](repeating: 0, count: max(1, size))
+        sysctlbyname("hw.model", &buf, &size, nil, 0)
+        return String(cString: buf)
+    }
+    #endif
+
+    /// The screen stays on while something plays.
+    private func keepScreenOn(_ on: Bool) {
+        #if os(macOS)
+        if on, awake == nil {
+            awake = ProcessInfo.processInfo.beginActivity(options: [.idleDisplaySleepDisabled, .userInitiated], reason: "Playing video")
+        } else if !on, let a = awake {
+            ProcessInfo.processInfo.endActivity(a)
+            awake = nil
+        }
+        #else
+        UIApplication.shared.isIdleTimerDisabled = on
+        #endif
     }
 
     // MARK: backup
@@ -224,37 +271,47 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         case "app.log": return AppLog.all()
         case "app.info":
             let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-            var o: [String: Any] = ["version": v, "sdk": 0, "device": UIDevice.current.model + " (iOS " + UIDevice.current.systemVersion + ")", "ip": ""]
-            o["platform"] = "ios"
-            return o
+            #if os(macOS)
+            let osv = ProcessInfo.processInfo.operatingSystemVersion
+            return ["version": v, "sdk": 0, "device": Bridge.macModel() + " (macOS \(osv.majorVersion).\(osv.minorVersion))", "ip": "", "platform": "mac"]
+            #else
+            return ["version": v, "sdk": 0, "device": UIDevice.current.model + " (iOS " + UIDevice.current.systemVersion + ")", "ip": "", "platform": "ios"]
+            #endif
         case "update.check": return ["available": false, "current": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "", "code": 0, "name": "", "size": 0, "notes": ""]
         case "update.install": return ["status": "uptodate"]
         case "app.exit":
-            onMain { self.player.stop() }
+            onMain { self.player.stop(); self.host?.exitApp() }
             return nil
-        case "app.background": return nil
+        case "app.background":
+            DispatchQueue.main.async { self.host?.moveToBackground() }
+            return nil
+        case "app.fullscreen":
+            DispatchQueue.main.async { self.host?.toggleFullScreen() }
+            return nil
         case "app.keepScreenOn":
             let on = b(a, "on")
-            DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = on }
+            DispatchQueue.main.async { self.keepScreenOn(on) }
             return nil
         case "app.webBg":
             let c = s(a, "color")
-            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.setBackground(hex: c) }
+            DispatchQueue.main.async { self.host?.setBackground(hex: c) }
             return nil
         case "app.textInput": return nil
         case "app.haptic":
+            #if os(iOS)
             let style = s(a, "style", "light")
             DispatchQueue.main.async { Haptics.tap(style) }
+            #endif
             return nil
         case "app.airplay":
-            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.showAirPlayPicker() }
+            DispatchQueue.main.async { self.host?.showAirPlayPicker() }
             return nil
         case "app.pip":
             DispatchQueue.main.async { self.player.togglePictureInPicture() }
             return nil
         case "app.orientation":
             let landscape = b(a, "landscape")
-            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.requestOrientation(landscape: landscape) }
+            DispatchQueue.main.async { self.host?.requestOrientation(landscape: landscape) }
             return nil
 
         // playlists
@@ -416,7 +473,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             let x = (a["x"] as? NSNumber)?.doubleValue ?? 0, y = (a["y"] as? NSNumber)?.doubleValue ?? 0
             let w = (a["w"] as? NSNumber)?.doubleValue ?? 0, h = (a["h"] as? NSNumber)?.doubleValue ?? 0
             let vis = b(a, "visible", true)
-            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.setVideoRect(x: x, y: y, w: w, h: h, visible: vis) }
+            DispatchQueue.main.async { self.host?.setVideoRect(x: x, y: y, w: w, h: h, visible: vis) }
             return nil
         case "player.tracks": return onMain { self.player.tracks() }
         case "player.select":
@@ -440,10 +497,10 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             o["app"] = "Topplayer"
             o["version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
             let data = try JSONSerialization.data(withJSONObject: o, options: [.prettyPrinted])
-            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.shareBackup(data) }
+            DispatchQueue.main.async { self.host?.shareBackup(data) }
             return nil
         case "backup.pick":
-            DispatchQueue.main.async { (self.web?.window?.rootViewController as? MainViewController)?.pickBackup() }
+            DispatchQueue.main.async { self.host?.pickBackup() }
             return nil
         case "backup.export":
             var o = try db.exportBackup()
