@@ -3,28 +3,20 @@ import AVKit
 #if os(macOS)
 import AppKit
 
-/// A view that shows an AVPlayerLayer (sits behind the transparent web view, like the video surface on Android).
+/// A view whose own layer is the AVPlayerLayer (sits behind the transparent web view, like the video surface on
+/// Android). As the view's own layer it always has the view's size: a sublayer could stay at zero size after a
+/// resize, which gives sound without a picture.
 final class PlayerView: NSView {
     let playerLayer = AVPlayerLayer()
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer = CALayer()
-        layer?.backgroundColor = NSColor.black.cgColor
-        playerLayer.frame = bounds
-        playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-        layer?.addSublayer(playerLayer)
+        playerLayer.backgroundColor = NSColor.black.cgColor
     }
     convenience init() { self.init(frame: .zero) }
     required init?(coder: NSCoder) { fatalError("not used") }
-    /// The picture follows the view at once (no implicit layer animation when the window or the preview resizes).
-    override func layout() {
-        super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        playerLayer.frame = bounds
-        CATransaction.commit()
-    }
+    override func makeBackingLayer() -> CALayer { playerLayer }
+    override var wantsUpdateLayer: Bool { true }
 }
 #else
 import UIKit

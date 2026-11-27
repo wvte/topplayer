@@ -48,11 +48,20 @@ final class PlayerEngine: NSObject {
     private var refusals = 0
     /// Servers where Apple's player failed and VLC then played: their streams go to VLC straight away from then on.
     private var vlcHosts: Set<String> = []
+    /// whether Apple's player showed a picture (a size) for this stream, and since when its clock runs
+    private var sawVideo = false
+    private var playingSince: Date?
+    /// Streams where Apple's player gave sound without a picture (MPEG-2 and other formats it cannot show): VLC plays
+    /// them from then on.
+    private var vlcURLs: Set<String> = []
+    private var noVideoSwitch = false
     /// answers that mean "not now": too many connections, busy, blocked for a moment
     private static let notNow: Set<Int> = [403, 429, 458, 509, 512]
     private static let startAV: TimeInterval = 12
     private static let startVLC: TimeInterval = 25
     private static let stall: TimeInterval = 45
+    /// how long Apple's player may play sound without a picture before VLC takes over
+    private static let noPicture: TimeInterval = 4
     private static let startAVLive: TimeInterval = 10
     private static let startVLCLive: TimeInterval = 20
 
@@ -80,12 +89,14 @@ final class PlayerEngine: NSObject {
     }
 
     fileprivate func observe(_ n: String, _ d: [String: Any]) {
+        if n == "player.video", ((d["w"] as? NSNumber)?.intValue ?? (d["w"] as? Int) ?? 0) > 0 { sawVideo = true; return }
         guard n == "player.time", let pos = (d["pos"] as? NSNumber)?.int64Value ?? (d["pos"] as? Int64) else { return }
         // started = the clock moved forward (a resume position alone is not a picture)
         if lastPos >= 0, pos > lastPos {
-            if !started, active == .vlc, triedVLC, let h = Self.host(lastArgs), vlcHosts.insert(h).inserted {
+            if !started, active == .vlc, triedVLC, !noVideoSwitch, let h = Self.host(lastArgs), vlcHosts.insert(h).inserted {
                 AppLog.add("afspelen: \(h) speelt met VLC en niet met de Apple speler, VLC gaat daar voortaan eerst")
             }
+            if !started { playingSince = Date() }
             started = true
             lastProgress = Date()
         }
@@ -111,6 +122,14 @@ final class PlayerEngine: NSObject {
             } else if active == .vlc, waited > (live ? Self.startVLCLive : Self.startVLC) {
                 fail(reason: "START")
             }
+        } else if active == .av, !sawVideo, let since = playingSince, now.timeIntervalSince(since) > Self.noPicture {
+            // Apple's player plays the sound but shows no picture: a video format it cannot show. VLC can.
+            let u = lastArgs["url"] as? String ?? ""
+            AppLog.add("afspelen: geluid zonder beeld bij de Apple speler (\(URL(string: u)?.host ?? "?")), VLC neemt het over")
+            if !u.isEmpty { vlcURLs.insert(u) }
+            if !live, lastPos > 0 { lastArgs["start"] = lastPos }
+            noVideoSwitch = true
+            _ = switchToVLC()
         } else if !live, !userPaused, PlayerEngine.appActive, now.timeIntervalSince(lastProgress) > Self.stall {
             fail(reason: "STALL")
         }
@@ -248,6 +267,8 @@ final class PlayerEngine: NSObject {
         guard active == .av, !lastArgs.isEmpty else { return false }
         av.stop()
         triedVLC = true
+        started = false
+        playingSince = nil
         startedAt = Date(); lastProgress = Date(); lastPos = -1
         show(.vlc)
         vlc.play(lastArgs)
@@ -277,6 +298,10 @@ final class PlayerEngine: NSObject {
         var forced = a["engine"] as? String
         let live = a["live"] as? Bool ?? false
         if forced == nil, let h = Self.host(a), vlcHosts.contains(h) { forced = "vlc" }
+        if forced == nil, let u = a["url"] as? String, vlcURLs.contains(u) { forced = "vlc" }
+        sawVideo = false
+        playingSince = nil
+        noVideoSwitch = false
         if live, forced != "vlc", let hls = Self.hlsVariant(a["url"] as? String ?? "") {
             // the HLS form with Apple's player first; the address as listed goes to VLC if that does not work
             var b = a
