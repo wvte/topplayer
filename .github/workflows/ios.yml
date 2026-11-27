@@ -98,7 +98,7 @@ jobs:
           screencapture -x ../mac-window.png & SC=$!
           sleep 6; kill $SC 2>/dev/null || true
           kill $PID || true
-          grep -i "error\|fatal" run.log | head -10 || true
+          grep -i "topplayer:\|error\|fatal" run.log | head -20 || true
       - name: Keep a screenshot of the first start
         if: always()
         uses: actions/upload-artifact@v4
@@ -126,4 +126,5 @@ jobs:
           gh release view mac-latest > /dev/null 2>&1 || gh release create mac-latest --prerelease --target "${GITHUB_SHA}" --title "Mac (laatste build)" --notes "$NOTES"
           gh release edit mac-latest --notes "$NOTES" --target "${GITHUB_SHA}"
           gh release upload mac-latest ios/Topplayer-Mac.dmg --clobber
+          if [ -f mac-window.png ]; then cp mac-window.png Topplayer-Mac-eerste-start.png; gh release upload mac-latest Topplayer-Mac-eerste-start.png --clobber; fi
           gh release view mac-latest --json assets --jq '.assets[] | .name + " " + (.size|tostring)'

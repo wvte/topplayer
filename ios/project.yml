@@ -53,6 +53,7 @@ targets:
       - path: App
         excludes: ["Resources", "Assets.xcassets"]
       - path: Mac
+        excludes: ["Info.plist"]
       - path: App/Resources/ui
         type: folder
       - path: App/Resources/demo.m3u
@@ -78,6 +79,8 @@ targets:
       properties:
         CFBundleName: Topplayer
         CFBundleDisplayName: Topplayer
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.entertainment
         LSMinimumSystemVersion: "12.0"
         NSHumanReadableCopyright: "Topplayer. Video: AVFoundation en VLCKit (LGPL 2.1)."

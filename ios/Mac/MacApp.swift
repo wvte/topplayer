@@ -97,7 +97,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         _ = submenu("Topplayer", [
             item("Over Topplayer", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
             .separator(),
-            item("Instellingen…", #selector(openSettings), ",", target: self),
+            item("Instellingen…", #selector(MacAppDelegate.openSettings), ",", target: self),
             .separator(),
             item("Verberg Topplayer", #selector(NSApplication.hide(_:)), "h"),
             item("Verberg andere", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
@@ -114,15 +114,15 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             item("Plak", #selector(NSText.paste(_:)), "v"),
             item("Selecteer alles", #selector(NSText.selectAll(_:)), "a"),
             .separator(),
-            item("Zoek", #selector(openSearch), "f", target: self),
+            item("Zoek", #selector(MacAppDelegate.openSearch), "f", target: self),
         ])
         _ = submenu("Weergave", [
-            item("Terug", #selector(goBack), "[", target: self),
+            item("Terug", #selector(MacAppDelegate.goBack), "[", target: self),
             .separator(),
-            item("Groter", #selector(zoomIn), "+", target: self),
-            hidden(item("Groter", #selector(zoomIn), "=", target: self)), // Cmd = is Cmd + without shift
-            item("Kleiner", #selector(zoomOut), "-", target: self),
-            item("Normale grootte", #selector(zoomReset), "0", target: self),
+            item("Groter", #selector(MacAppDelegate.zoomIn), "+", target: self),
+            hidden(item("Groter", #selector(MacAppDelegate.zoomIn), "=", target: self)), // Cmd = is Cmd + without shift
+            item("Kleiner", #selector(MacAppDelegate.zoomOut), "-", target: self),
+            item("Normale grootte", #selector(MacAppDelegate.zoomReset), "0", target: self),
             .separator(),
             item("Volledig scherm", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ])
