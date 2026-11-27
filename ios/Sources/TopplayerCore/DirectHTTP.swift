@@ -127,7 +127,7 @@ public enum DirectHTTP {
         hints.ai_protocol = Int32(IPPROTO_TCP)
         var list: UnsafeMutablePointer<addrinfo>?
         let rc = getaddrinfo(host, String(port), &hints, &list)
-        guard rc == 0, let first = list else { throw Failure(message: "Server not found: \(host)") }
+        guard rc == 0, let first = list else { throw Failure(message: "Server not found (DNS)") }
         defer { freeaddrinfo(first) }
         var addrs: [UnsafeMutablePointer<addrinfo>] = []
         var p: UnsafeMutablePointer<addrinfo>? = first
@@ -170,7 +170,7 @@ public enum DirectHTTP {
             }
             close(fd)
         }
-        throw Failure(message: "Cannot connect to \(host):\(port) (\(why))")
+        throw Failure(message: "Cannot connect (\(why))")
     }
 
     static func sendAll(_ fd: Int32, _ bytes: [UInt8]) throws {

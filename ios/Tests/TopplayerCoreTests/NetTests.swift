@@ -100,6 +100,7 @@ final class NetTests: XCTestCase {
             case "/ua": let v = Array((headers["user-agent"] ?? "").utf8); return TinyServer.answer("200 OK", ["Content-Length: \(v.count)"], v)
             case "/big": return TinyServer.answer("200 OK", ["Content-Length: \(big.count)"], big)
             case "/q?username=a%20b&password=c": return TinyServer.answer("200 OK", ["Content-Length: 2"], Array("ok".utf8))
+            case "/busy": return TinyServer.answer("503 Busy", ["Content-Length: 0"], [])
             case "/blocked":
                 let b = Array("<html><body><h1>Access denied</h1> IP not allowed</body></html>".utf8)
                 return TinyServer.answer("512 Blocked", ["Content-Length: \(b.count)"], b)
@@ -154,14 +155,27 @@ final class NetTests: XCTestCase {
         XCTAssertEqual(last, 1_500_000)
     }
 
-    /// A refusal shows the server's own words, and a server error (5xx) gets one more try.
+    /// A refusal shows the server and the server's own words, and is asked only once.
     func testServerErrorMessage() {
         NetTests.lock.lock(); NetTests.hits["/blocked"] = 0; NetTests.lock.unlock()
         XCTAssertThrowsError(try Net.getData(base + "/blocked")) { e in
-            XCTAssertEqual((e as? DbError)?.message, "HTTP 512: Access denied IP not allowed")
+            XCTAssertEqual((e as? DbError)?.message, "127.0.0.1:\(NetTests.server.port): HTTP 512: Access denied IP not allowed")
         }
         NetTests.lock.lock(); let n = NetTests.hits["/blocked"] ?? 0; NetTests.lock.unlock()
-        XCTAssertEqual(n, 3, "two tries over the socket, one through URLSession")
+        XCTAssertEqual(n, 1, "a refusal is not asked again")
+    }
+
+    /// A busy server (503) gets one more try.
+    func testBusyServerOneMoreTry() {
+        NetTests.lock.lock(); NetTests.hits["/busy"] = 0; NetTests.lock.unlock()
+        XCTAssertThrowsError(try Net.getData(base + "/busy"))
+        NetTests.lock.lock(); let n = NetTests.hits["/busy"] ?? 0; NetTests.lock.unlock()
+        XCTAssertEqual(n, 2)
+    }
+
+    func testHostPort() {
+        XCTAssertEqual(Net.hostPort("http://tv.example:8080/get.php?username=u&password=p"), "tv.example:8080")
+        XCTAssertEqual(Net.hostPort("http://tv.example/get.php"), "tv.example:80")
     }
 
     func testRedactHidesThePassword() {
@@ -169,7 +183,11 @@ final class NetTests: XCTestCase {
     }
 
     func testUnreachableFallsBackAndFails() {
-        // nothing listens on port 1: the socket fails, URLSession fails too, and the error comes back
-        XCTAssertThrowsError(try Net.getData("http://127.0.0.1:1/x"))
+        // nothing listens on port 1: the socket fails, URLSession fails too, and both reasons come back with the server
+        XCTAssertThrowsError(try Net.getData("http://127.0.0.1:1/x")) { e in
+            let m = (e as? DbError)?.message ?? ""
+            XCTAssertTrue(m.hasPrefix("127.0.0.1:1: Cannot connect"), m)
+            XCTAssertTrue(m.contains("via systeem: "), m)
+        }
     }
 }

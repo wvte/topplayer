@@ -18,10 +18,21 @@ public enum Net {
 
     private static func isPlainHTTP(_ url: String) -> Bool { directHTTP && url.lowercased().hasPrefix("http://") }
 
-    /// Tries the socket of our own, with one more try after a server error (5xx). nil when the file is there;
-    /// otherwise the reason, and URLSession gets a turn.
+    /// "host:port", the part of an address that tells whether the server was typed right (no user name or password).
+    public static func hostPort(_ url: String) -> String {
+        guard let c = DirectHTTP.components(url), let h = c.host else { return "?" }
+        return h + ":" + String(c.port ?? ((c.scheme ?? "").lowercased() == "https" ? 443 : 80))
+    }
+
+    private static func text(_ e: Error) -> String {
+        (e as? DirectHTTP.ServerAnswer)?.message ?? (e as? DirectHTTP.Failure)?.message ?? (e as? DbError)?.message ?? e.localizedDescription
+    }
+
+    /// Tries the socket of our own. nil when the file is there, otherwise the reason. Only a busy server (502, 503,
+    /// 504) gets one more try: a server that refuses is not asked again and again.
     private static func viaSocket(_ url: String, ua: String?, to target: URL, progress: ((Int64, Int64) -> Void)?) -> Error? {
         let agent = (ua ?? "").isEmpty ? defaultUA : ua!
+        let t0 = Date()
         var attempt = 0
         while true {
             attempt += 1
@@ -30,31 +41,46 @@ public enum Net {
                 case .saved:
                     try Gzip.inflateInPlace(target)
                     let size = (try? FileManager.default.attributesOfItem(atPath: target.path)[.size] as? Int64) ?? 0
-                    if size == 0 { return DbError(message: "Empty response") }
+                    if size == 0 {
+                        log?("net: \(redact(url)): leeg antwoord")
+                        return DbError(message: "Empty response")
+                    }
+                    log?(String(format: "net: %@ ok, %.1f MB in %.1f s", redact(url), Double(size) / 1_000_000, Date().timeIntervalSince(t0)))
                     return nil
                 case .https:
                     return DirectHTTP.Failure(message: "redirect to https")
                 }
             } catch let e as DirectHTTP.ServerAnswer {
-                if e.status >= 500 && attempt < 2 {
-                    log?("net: \(e.message) van \(redact(url)), nog een keer")
-                    Thread.sleep(forTimeInterval: 1.5)
+                if [502, 503, 504].contains(e.status) && attempt < 2 {
+                    log?("net: \(redact(url)): \(e.message), over 2 s nog een keer")
+                    Thread.sleep(forTimeInterval: 2)
                     continue
                 }
-                log?("net: \(e.message) van \(redact(url))")
+                log?("net: \(redact(url)): \(e.message)")
                 return e
             } catch {
-                let why = (error as? DirectHTTP.Failure)?.message ?? error.localizedDescription
-                log?("net: eigen verbinding lukte niet (\(why)) voor \(redact(url)), via het systeem")
+                log?("net: \(redact(url)): eigen verbinding lukte niet (\(text(error)))")
                 return error
             }
         }
     }
 
-    /// The error to show when both ways failed: the server's own answer over our socket says the most.
-    private static func pick(_ socket: Error?, _ system: Error) -> Error {
-        if let a = socket as? DirectHTTP.ServerAnswer { return DbError(message: a.message) }
-        return system
+    /// URLSession gets a turn when our connection itself failed, or when the server did not understand our request
+    /// (400, 505). Not when the server clearly refused: asking again the other way only adds to its count.
+    private static func systemMayHelp(_ e: Error) -> Bool {
+        guard let a = e as? DirectHTTP.ServerAnswer else { return true }
+        return a.status == 400 || a.status == 505
+    }
+
+    /// The message to show: which server and port, what our connection got and what the system got.
+    private static func failure(_ url: String, own: Error?, system: Error?) -> Error {
+        var parts: [String] = []
+        if let o = own { parts.append(text(o)) }
+        if let s = system {
+            log?("net: \(redact(url)): via het systeem: \(text(s))")
+            parts.append((own == nil ? "" : "via systeem: ") + text(s))
+        }
+        return DbError(message: hostPort(url) + ": " + parts.joined(separator: " · "))
     }
 
     private static let session: URLSession = {
@@ -84,8 +110,9 @@ public enum Net {
             defer { try? FileManager.default.removeItem(at: tmp) }
             socketError = viaSocket(url, ua: ua, to: tmp, progress: nil)
             if socketError == nil { return try Data(contentsOf: tmp) }
+            if !systemMayHelp(socketError!) { throw failure(url, own: socketError, system: nil) }
         }
-        do { return try getDataSystem(url, ua: ua) } catch { throw pick(socketError, error) }
+        do { return try getDataSystem(url, ua: ua) } catch { throw failure(url, own: socketError, system: error) }
     }
 
     private static func getDataSystem(_ url: String, ua: String?) throws -> Data {
@@ -148,8 +175,9 @@ public enum Net {
         if isPlainHTTP(url) {
             socketError = viaSocket(url, ua: ua, to: target, progress: progress)
             if socketError == nil { return }
+            if !systemMayHelp(socketError!) { throw failure(url, own: socketError, system: nil) }
         }
-        do { try downloadSystem(url, ua: ua, to: target, progress: progress) } catch { throw pick(socketError, error) }
+        do { try downloadSystem(url, ua: ua, to: target, progress: progress) } catch { throw failure(url, own: socketError, system: error) }
     }
 
     private static func downloadSystem(_ url: String, ua: String?, to target: URL, progress: ((Int64, Int64) -> Void)?) throws {
